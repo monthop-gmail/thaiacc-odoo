@@ -4,7 +4,7 @@
         <field name="model">payment.provider</field>
         <field name="inherit_id" ref="payment.payment_provider_form" />
         <field name="arch" type="xml">
-            <xpath expr="//group[@name='payment_form']" position="after">
+            <xpath expr="//group[@name='provider_credentials']" position="after">
                 <group string="PromptPay QR code" name="promptpay_group">
                     <field
                         name="qr_code_promptpay"

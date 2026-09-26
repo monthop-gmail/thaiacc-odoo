@@ -1,6 +1,12 @@
 # gitaggregate configuration
 # Usage: pip install git-aggregator && gitaggregate -c repos.yml
 #
+# 20.0 STATUS (as of 2026-09-26, Odoo 20 release week): only OCA/partner-contact
+# has a 20.0 branch yet. Entries below target 20.0 and will fail loudly (branch
+# not found) until the OCA 20.0 branches exist — the devcontainer entrypoint
+# turns that into a clear error instead of starting Odoo on a broken tree.
+# Uncomment entries per repo as their 20.0 branches land, or re-pin to 19.0
+# if you need the 19.0 stack (use the 19.0 branch of this repo for that).
 # This pulls OCA modules from our forks (with pending migration PRs)
 # Once PRs are merged upstream, switch remotes from monthop → oca
 
@@ -10,8 +16,8 @@
   remotes:
     oca: https://github.com/OCA/server-ux.git
   merges:
-    - oca 19.0
-  target: oca 19.0
+    - oca 20.0
+  target: oca 20.0
 
 # New repo in 19.0: the whole tier_validation family was split out of server-ux.
 # Provides base_tier_validation, base_tier_validation_formula,
@@ -20,8 +26,8 @@
   remotes:
     oca: https://github.com/OCA/tier-validation.git
   merges:
-    - oca 19.0
-  target: oca 19.0
+    - oca 20.0
+  target: oca 20.0
 
 ./l10n-thailand:
   remotes:
@@ -32,14 +38,14 @@
   # makes this list look like more is pending than really is.
   # Merged so far: l10n_th_base_utils (#577), l10n_th_account_tax (#578).
   merges:
-    - oca 19.0
-    - monthop 19.0-mig-l10n_th_account_tax_report
-    - monthop 19.0-mig-l10n_th_account_wht_cert_form
-    - monthop 19.0-mig-l10n_th_mis_report
-    - monthop 19.0-mig-l10n_th_partner
-    - monthop 19.0-mig-l10n_th_tier_department
-    - monthop 19.0-mig-l10n_th_tier_department_demo
-  target: monthop merge-19.0
+    - oca 20.0
+    - monthop 20.0-mig-l10n_th_account_tax_report
+    - monthop 20.0-mig-l10n_th_account_wht_cert_form
+    - monthop 20.0-mig-l10n_th_mis_report
+    - monthop 20.0-mig-l10n_th_partner
+    - monthop 20.0-mig-l10n_th_tier_department
+    - monthop 20.0-mig-l10n_th_tier_department_demo
+  target: monthop merge-20.0
   fetch_all: true
   shell_command_after:
     # resolve .codecov.yml conflicts from multiple branches
@@ -51,8 +57,8 @@
   remotes:
     oca: https://github.com/OCA/partner-contact.git
   merges:
-    - oca 19.0
-  target: oca 19.0
+    - oca 20.0
+  target: oca 20.0
 
 # mis_builder was released on OCA/mis-builder 19.0 (19.0.1.2.0), so the
 # versada migration branch is no longer needed.
@@ -60,12 +66,12 @@
   remotes:
     oca: https://github.com/OCA/mis-builder.git
   merges:
-    - oca 19.0
-  target: oca 19.0
+    - oca 20.0
+  target: oca 20.0
 
 ./reporting-engine:
   remotes:
     oca: https://github.com/OCA/reporting-engine.git
   merges:
-    - oca 19.0
-  target: oca 19.0
+    - oca 20.0
+  target: oca 20.0

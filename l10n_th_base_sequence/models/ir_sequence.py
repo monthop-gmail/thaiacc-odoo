@@ -57,6 +57,11 @@ class IrSequence(models.Model):
             "h12": "%I",
             "min": "%M",
             "sec": "%S",
+            # ISO week legends added by core in 20.0 (ir_sequence.py); keep
+            # them available even though this module replaces the dict.
+            "isoyear": "%G",
+            "isoy": "%g",
+            "isoweek": "%V",
         }
 
         res = {}
@@ -111,7 +116,7 @@ class IrSequence(models.Model):
         try:
             interpolated_prefix = (self.prefix % d) if self.prefix else ""
             interpolated_suffix = (self.suffix % d) if self.suffix else ""
-        except KeyError as e:
+        except (KeyError, ValueError, TypeError) as e:
             raise UserError(
                 self.env._("Invalid prefix or suffix for sequence '%s'", self.name)
             ) from e

@@ -1,6 +1,6 @@
 {
     "name": "ThaiACC - Thai Accounting Complete Suite",
-    "version": "19.0.1.0.0",
+    "version": "20.0.1.0.0",
     "category": "Accounting/Localizations",
     "summary": "All Thai accounting modules + optional extras in one click",
     "author": "Accsumana",

@@ -1,12 +1,12 @@
-# ThaiACC — โมดูลบัญชีไทยสำหรับ Odoo 19
+# ThaiACC — โมดูลบัญชีไทยสำหรับ Odoo 20 (WIP migration)
 
 โมดูลบัญชีไทยที่ migrate และปรับแต่งสำหรับ Odoo 19 สร้างบน [OCA/l10n-thailand](https://github.com/OCA/l10n-thailand)
 
 ## Quick Start (GitHub Codespaces)
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/monthop-gmail/thaiacc-odoo?ref=19.0)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/monthop-gmail/thaiacc-odoo?ref=20.0)
 
-1. กดปุ่มด้านบน หรือไปที่ **Code > Codespaces > Create codespace on 19.0**
+1. กดปุ่มด้านบน หรือไปที่ **Code > Codespaces > Create codespace on 20.0**
 2. รอ build (~3-5 นาที) — ระบบจะ start Odoo 19 + PostgreSQL + ดึง OCA modules + init ให้อัตโนมัติ
 3. เปิด browser ที่ port 8069 — พร้อมใช้งาน!
 4. Login: **admin / admin**
@@ -70,7 +70,7 @@
 
 ### วิธี A: GitHub Codespaces (แนะนำ)
 
-กดปุ่ม **Code > Codespaces > Create codespace on 19.0** บน GitHub แล้วรอ — ได้ Odoo 19 + PostgreSQL + OCA modules พร้อมใช้เลย ไม่ต้องพิมพ์ command เพิ่มเติม
+กดปุ่ม **Code > Codespaces > Create codespace on 20.0** บน GitHub แล้วรอ — ได้ Odoo 19 + PostgreSQL + OCA modules พร้อมใช้เลย ไม่ต้องพิมพ์ command เพิ่มเติม
 
 เปิด browser ที่ port 8069 → Login: **admin / admin**
 
