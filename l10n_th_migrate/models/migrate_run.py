@@ -18,12 +18,16 @@ from .mapping import (
 # Every legacy read goes through this view of the tables — the runner never
 # issues anything but SELECTs against the source database.
 LEGACY_QUERIES = {
-    "withholding_taxes": "SELECT id, name, amount, income_tax_form FROM legacy19.account_withholding_tax ORDER BY id",
-    "partners": "SELECT id, name, vat, company_registry FROM legacy19.res_partner WHERE company_registry IS NOT NULL AND company_registry <> '' ORDER BY id",
+    "withholding_taxes": "SELECT id, name, amount, income_tax_form, is_pit FROM legacy19.account_withholding_tax ORDER BY id",
+    "partners": "SELECT id, name, vat, is_company, company_registry FROM legacy19.res_partner ORDER BY id",
     "company_novat": "SELECT company_id, novat FROM legacy19.res_company_novat ORDER BY company_id",
     "withholding_moves": "SELECT id, partner_id, date, state, base_amount, wht_amount, withholding_tax_id, bill_reference FROM legacy19.account_withholding_move ORDER BY id",
     "tax_invoice_evidence": "SELECT id, bill_reference, tax_invoice_number, tax_invoice_date FROM legacy19.account_tax_invoice_evidence ORDER BY id",
     "pit_tables": "SELECT id, calendar_year FROM legacy19.personal_income_tax ORDER BY id",
+    "account_moves": "SELECT id, ref, move_type, state, partner_id, date, amount_total FROM legacy19.account_move ORDER BY id",
+    "account_move_lines": "SELECT id, move_id, account_code, debit, credit FROM legacy19.account_move_line ORDER BY id",
+    "banks": "SELECT id, partner_id, acc_number, bank_name, promptpay_id FROM legacy19.partner_bank ORDER BY id",
+    "certs": "SELECT id, withholding_move_id, cert_number, income_type FROM legacy19.account_withholding_cert ORDER BY id",
     "pit_rates": "SELECT id, pit_id, sequence, income_from, income_to, tax_rate FROM legacy19.personal_income_tax_rate ORDER BY pit_id, sequence",
 }
 
@@ -78,17 +82,33 @@ class L10nThMigrateRun(models.Model):
     def _map_withholding_taxes(self, conn, report):
         rows = self._fetch_legacy(conn, "withholding_taxes")
         Tax = self.env["account.tax"]
+        group = self.env["account.tax.group"].search(
+            [("name", "ilike", "WHT")], limit=1,
+        ) or self.env["account.tax.group"].create({"name": "Withholding Tax (WHT)"})
         created = {}
         for row in rows:
             existing = Tax.search(
-                [("name", "=", row["name"]), ("is_withholding_tax", "=", True)],
+                [("name", "=", row["name"]), ("is_withholding_tax", "=", True),
+                 ("company_id", "=", self.env.company.id)],
                 limit=1,
             )
             if existing:
+                # align the fiscal country (an existing same-name tax may
+                # predate the company's fiscal-country setting — e.g. demo)
+                fiscal = self.env.company.account_fiscal_country_id
+                if fiscal and existing.country_id != fiscal:
+                    existing.country_id = fiscal.id
                 created[row["id"]] = existing
                 continue
-            vals = map_withholding_tax(row, self.env.company.id)
+            vals = map_withholding_tax(row, self.env.company.id, group.id)
             created[row["id"]] = Tax.create(vals)
+            # mapped taxes must belong to the company's fiscal country.
+            # Write AFTER create: country_id is a stored compute depending on
+            # company_id, so an explicit value inside create vals gets
+            # recomputed (create carries company_id) and silently lost.
+            fiscal = self.env.company.account_fiscal_country_id
+            if fiscal:
+                created[row["id"]].country_id = fiscal.id
         report["withholding_taxes"] = {
             "legacy_rows": len(rows),
             "mapped": len(created),
@@ -128,34 +148,62 @@ class L10nThMigrateRun(models.Model):
         rows = self._fetch_legacy(conn, "partners")
         Partner = self.env["res.partner"]
         mapped = 0
+        classified = 0
+        unresolved = []
         for row in rows:
-            partner = Partner.search([("vat", "=", row["vat"])], limit=1)
-            if not partner:
+            domain = [("vat", "=", row["vat"])] if row["vat"] else [
+                ("name", "=", row["name"]),
+            ]
+            matches = Partner.search(domain)
+            if len(matches) != 1:
+                unresolved.append(row["id"])
                 continue
+            partner = matches
+            partner.l10n_th_pnd_entity_type = (
+                "company" if row["is_company"] else "person"
+            )
+            classified += 1
             identifiers = map_branch_identifier(row["company_registry"])
             if identifiers:
-                partner.write({"additional_identifiers": identifiers})
+                partner.write({
+                    "additional_identifiers": {
+                        **(partner.additional_identifiers or {}), **identifiers,
+                    },
+                })
                 mapped += 1
         report["branch_identifiers"] = {
-            "legacy_rows": len(rows),
+            "legacy_rows": sum(bool(r["company_registry"]) for r in rows),
             "mapped": mapped,
+        }
+        report["pnd_entity_types"] = {
+            "legacy_rows": len(rows), "mapped": classified, "unresolved": unresolved,
         }
 
     def _map_tax_invoice_evidence(self, conn, report):
-        rows = self._fetch_legacy(conn, "tax_invoice_evidence")
+        vendor_refs = {
+            move["ref"] for move in self._fetch_legacy(conn, "account_moves")
+            if move["move_type"] in ("in_invoice", "in_receipt")
+            and move["state"] == "posted"
+        }
+        rows = [
+            row for row in self._fetch_legacy(conn, "tax_invoice_evidence")
+            if row["bill_reference"] in vendor_refs
+        ]
         Move = self.env["account.move"]
         mapped = 0
+        unresolved = []
         for row in rows:
-            move = Move.search(
+            matches = Move.search(
                 [
                     ("ref", "=", row["bill_reference"]),
                     ("move_type", "in", ("in_invoice", "in_receipt")),
+                    ("company_id", "=", self.env.company.id),
                 ],
-                limit=1,
             )
-            if not move:
+            if len(matches) != 1:
+                unresolved.append(row["id"])
                 continue
-            move.write(
+            matches.write(
                 {
                     "l10n_th_vendor_tax_invoice_number": row[
                         "tax_invoice_number"
@@ -167,6 +215,7 @@ class L10nThMigrateRun(models.Model):
         report["tax_invoice_evidence"] = {
             "legacy_rows": len(rows),
             "mapped": mapped,
+            "unresolved": unresolved,
         }
 
     def _archive_legacy_only(self, conn, report):
@@ -196,6 +245,158 @@ class L10nThMigrateRun(models.Model):
             count += 1
         report["archived_rows"] = count
 
+    def _trial_balance(self, conn, report):
+        """Matrix 1: posted source and target control totals by document ref.
+
+        Source cancelled entries are excluded from the trial balance. Target
+        payment entries are outside this document control and reconciled by
+        the separate withholding check.
+        """
+        moves = [
+            row for row in self._fetch_legacy(conn, "account_moves")
+            if row["state"] == "posted"
+        ]
+        lines = self._fetch_legacy(conn, "account_move_lines")
+        posted_ids = {move["id"] for move in moves}
+        lines = [line for line in lines if line["move_id"] in posted_ids]
+        debit = sum(float(l["debit"]) for l in lines)
+        credit = sum(float(l["credit"]) for l in lines)
+        unbalanced = []
+        by_move = {}
+        for line in lines:
+            by_move.setdefault(line["move_id"], []).append(line)
+        for move in moves:
+            move_lines = by_move.get(move["id"], [])
+            move_debit = sum(float(l["debit"]) for l in move_lines)
+            move_credit = sum(float(l["credit"]) for l in move_lines)
+            if abs(move_debit - move_credit) > 0.01:
+                unbalanced.append(move["ref"])
+        target_moves = self.env["account.move"].search([
+            ("ref", "in", [move["ref"] for move in moves]),
+            ("move_type", "in", ["in_invoice", "in_receipt", "out_invoice", "out_refund"]),
+            ("state", "=", "posted"),
+            ("company_id", "=", self.env.company.id),
+        ])
+        target_lines = target_moves.line_ids
+        target_debit = sum(target_lines.mapped("debit"))
+        target_credit = sum(target_lines.mapped("credit"))
+        report["trial_balance"] = {
+            "legacy_debit": debit,
+            "legacy_credit": credit,
+            "debit_credit_equal": abs(debit - credit) < 0.01,
+            "moves": len(moves),
+            "unbalanced_moves": unbalanced,
+            "target_debit": target_debit,
+            "target_credit": target_credit,
+            "target_debit_credit_equal": abs(target_debit - target_credit) < 0.01,
+            "target_moves": len(target_moves),
+            "target_missing_refs": sorted(
+                {move["ref"] for move in moves} - set(target_moves.mapped("ref")),
+            ),
+            "debit_delta": round(target_debit - debit, 2),
+            "credit_delta": round(target_credit - credit, 2),
+        }
+
+    def _map_banks(self, conn, report):
+        """Matrix 7: map account and PromptPay proxy to official bank fields."""
+        rows = self._fetch_legacy(conn, "banks")
+        Bank = self.env["res.partner.bank"]
+        mapped = 0
+        unresolved = []
+        for row in rows:
+            vat = self._partner_vat(conn, row["partner_id"])
+            partners = self.env["res.partner"].search([("vat", "=", vat)]) if vat else self.env["res.partner"]
+            if len(partners) != 1:
+                unresolved.append(row["id"])
+                continue
+            partner = partners
+            proxy = row["promptpay_id"]
+            proxy_type = (
+                "merchant_tax_id" if proxy and len(proxy) == 13 and proxy.isdigit()
+                else "mobile" if proxy and len(proxy) == 10 and proxy.isdigit()
+                else False
+            )
+            existing = Bank.search(
+                [("account_number", "=", row["acc_number"]), ("partner_id", "=", partner.id)],
+                limit=1,
+            )
+            if not existing:
+                Bank.create({
+                    "account_number": row["acc_number"],
+                    "partner_id": partner.id,
+                    "proxy_type": proxy_type,
+                    "proxy_value": proxy if proxy_type else False,
+                })
+                mapped += 1
+            elif proxy_type:
+                existing.write({"proxy_type": proxy_type, "proxy_value": proxy})
+                mapped += 1
+            if proxy and not proxy_type:
+                unresolved.append(row["id"])
+        report["banks"] = {
+            "legacy_rows": len(rows), "mapped": mapped, "unresolved": unresolved,
+        }
+
+    def _partner_vat(self, conn, legacy_partner_id):
+        rows = self._fetch_legacy(conn, "partners")
+        for row in rows:
+            if row["id"] == legacy_partner_id:
+                return row["vat"]
+        return None
+
+    def _archive_certificates(self, conn, report):
+        """Matrix 8: legacy WHT certificates have no official 20.0
+        equivalent — archived verbatim, read-only history."""
+        Archive = self.env["l10n_th.migrate.archive"]
+        count = 0
+        for row in self._fetch_legacy(conn, "certs"):
+            Archive.create({
+                "run_id": self.id,
+                "source_table": "legacy19.account_withholding_cert",
+                "legacy_id": row["id"],
+                "payload": dict(row),
+            })
+            count += 1
+        report["certificates_archived"] = count
+
+    def _no_duplicate_check(self, report, mapped_taxes):
+        """Matrix 10: each MAPPED legacy tax must exist exactly once by name.
+        The Thai chart legitimately ships several same-name taxes for
+        different conditions, so only mapped names are checked."""
+        dupes = []
+        for tax in mapped_taxes:
+            same = self.env["account.tax"].search_count(
+                [("name", "=", tax.name), ("company_id", "=", tax.company_id.id),
+                 ("is_withholding_tax", "=", True)],
+            )
+            if same > 1:
+                dupes.append(tax.name)
+        report["duplicate_taxes"] = dupes
+
+    def _customer_invoice_reconcile(self, conn, report):
+        """Matrix 2 (sales side): mirrored customer invoices get official
+        sales tax invoices automatically on posting."""
+        source_moves = {
+            move["ref"] for move in self._fetch_legacy(conn, "account_moves")
+            if move["move_type"] == "out_invoice" and move["state"] == "posted"
+        }
+        rows = [
+            row for row in self._fetch_legacy(conn, "tax_invoice_evidence")
+            if row["bill_reference"] in source_moves
+        ]
+        found = 0
+        for row in rows:
+            move = self.env["account.move"].search(
+                [
+                    ("ref", "=", row["bill_reference"]),
+                    ("move_type", "=", "out_invoice"),
+                ],
+                limit=1,
+            )
+            if move and move.l10n_th_tax_invoice_ids:
+                found += 1
+        report["customer_tax_invoices"] = {"legacy_rows": len(rows), "with_official_ti": found}
+
     # --- reconciliation -------------------------------------------------
 
     def _reconcile(self, conn, wht_map, report):
@@ -223,6 +424,35 @@ class L10nThMigrateRun(models.Model):
             "matched": abs(legacy_total - official_total) < 0.01,
         }
 
+    def _summarize(self, report):
+        """One audit view of the checks and the evidence still needed."""
+        balance = report["trial_balance"]
+        wht = report["reconciliation"]
+        report["reconciliation_summary"] = {
+            "source_balanced": balance["debit_credit_equal"] and not balance["unbalanced_moves"],
+            "target_balanced": balance["target_debit_credit_equal"],
+            "source_document_count": balance["moves"],
+            "target_document_count": balance["target_moves"],
+            "missing_document_refs": balance["target_missing_refs"],
+            "document_debit_delta": balance["debit_delta"],
+            "document_credit_delta": balance["credit_delta"],
+            "wht_delta": round(wht["official_wht_total"] - wht["legacy_wht_total"], 2),
+            "unresolved_partner_ids": report["pnd_entity_types"]["unresolved"],
+            "unresolved_bank_ids": report["banks"]["unresolved"],
+            "unresolved_vendor_tax_invoice_ids": report["tax_invoice_evidence"]["unresolved"],
+            "duplicate_tax_names": report["duplicate_taxes"],
+            "requires_manual_review": bool(
+                balance["target_missing_refs"]
+                or balance["debit_delta"]
+                or balance["credit_delta"]
+                or not wht["matched"]
+                or report["pnd_entity_types"]["unresolved"]
+                or report["banks"]["unresolved"]
+                or report["tax_invoice_evidence"]["unresolved"]
+                or report["duplicate_taxes"]
+            ),
+        }
+
     # --- entry point -----------------------------------------------------
 
     def action_run(self):
@@ -234,9 +464,15 @@ class L10nThMigrateRun(models.Model):
                     wht_map = run._map_withholding_taxes(conn, report)
                     run._map_pit_tables(conn, report)
                     run._map_branch_identifiers(conn, report)
+                    run._map_banks(conn, report)
                     run._map_tax_invoice_evidence(conn, report)
                     run._archive_legacy_only(conn, report)
+                    run._archive_certificates(conn, report)
+                    run._trial_balance(conn, report)
+                    run._customer_invoice_reconcile(conn, report)
+                    run._no_duplicate_check(report, wht_map.values())
                     run._reconcile(conn, wht_map, report)
+                    run._summarize(report)
                 finally:
                     conn.close()
                 run.write({"state": "done", "stats": report, "error_message": False})

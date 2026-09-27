@@ -20,21 +20,26 @@ INCOME_TYPE_BY_LEGACY_FORM = {
 }
 
 
-def map_withholding_tax(legacy, company_id):
+def map_withholding_tax(legacy, company_id, tax_group_id=None):
     """Legacy ``account.withholding.tax`` vals -> official ``account.tax``
     vals (is_withholding_tax engine). Rate sign flips: the legacy engine
     stored positive percents; official withholding taxes carry negative
     amounts."""
     rate = float(legacy.get("amount", 0.0))
     form = legacy.get("income_tax_form") or "pnd3"
+    is_pit = bool(legacy.get("is_pit"))
     return {
         "name": legacy["name"],
         "amount_type": "percent",
-        "amount": -abs(rate),
+        # A nonzero placeholder lets the official engine create its payment
+        # line. The PIT extension replaces it with the marginal amount.
+        "amount": -abs(rate) if rate else (-1.0 if is_pit else 0.0),
         "type_tax_use": "purchase",
         "is_withholding_tax": True,
+        "l10n_th_is_pit": is_pit,
         "l10n_th_income_tax_type": INCOME_TYPE_BY_LEGACY_FORM.get(form, "others"),
         "company_id": company_id,
+        "tax_group_id": tax_group_id,
     }
 
 

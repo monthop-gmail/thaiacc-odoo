@@ -19,11 +19,13 @@
         <!-- Progressive PIT tax (l10n_th_pit) for salary-type payments -->
         <record id="demo_wht_pit_progressive" model="account.tax">
             <field name="name">WHT PIT ขั้นบันได (บุคคลธรรมดา)</field>
+            <field name="country_id" ref="base.th"/>
             <field name="amount_type">percent</field>
             <field name="amount">-5.0</field>
             <field name="type_tax_use">purchase</field>
             <field name="is_withholding_tax" eval="True"/>
             <field name="l10n_th_income_tax_type">na</field>
+            <field name="tax_group_id" ref="ocaacc.demo_tax_group_wht"/>
             <field name="l10n_th_is_pit" eval="True"/>
         </record>
 

@@ -12,7 +12,10 @@ class TestThaiaccWhtFlow(TransactionCase):
     bill line and reaches the official payment withholding lines."""
 
     def test_demo_product_default_wht_reaches_payment(self):
+        self.env.company.country_id = self.env.ref("base.th")
+        self.env.company.account_fiscal_country_id = self.env.ref("base.th")
         product = self.env.ref("thaiacc.demo_product_consulting").product_variant_id
+        product.product_tmpl_id.supplier_taxes_id = False
         vendor = self.env.ref("ocaacc.demo_vendor_somchai")
 
         bill = self.env["account.move"].create({

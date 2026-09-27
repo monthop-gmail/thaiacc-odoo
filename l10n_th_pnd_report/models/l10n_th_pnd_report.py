@@ -124,7 +124,9 @@ class L10nThPndReport(models.Model):
 
     @api.model
     def _default_pnd_type(self, partner, tax):
-        if partner.is_company:
+        if partner.l10n_th_pnd_entity_type == "company" or (
+            not partner.l10n_th_pnd_entity_type and partner.is_company
+        ):
             return "pnd53"
         income_type = tax.l10n_th_income_tax_type or "na"
         return _INDIVIDUAL_TYPE_MAP.get(income_type, "pnd3")

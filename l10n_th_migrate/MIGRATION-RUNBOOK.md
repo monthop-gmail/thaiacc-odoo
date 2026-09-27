@@ -1,60 +1,78 @@
-# ThaiACC 19.0 → 20.0 Migration Runbook (repeatable)
+# ThaiACC 19.0 → 20.0 Migration Runbook
 
-Repeatable smoke for the migration contract (`MIGRATION-CONTRACT.md` in this
-module). Source database is only ever read (`set_session(readonly=True)`);
-posted accounting on the 20.0 side is never modified by the runner — it only
-adds master data, evidence fields and an archive.
+This runbook covers the deterministic legacy evidence fixture and the
+`l10n_th_migrate` runner. The runner connects to the source with a read-only
+PostgreSQL session. It maps master data and evidence; it does **not** carry
+posted journal entries into Odoo 20. An accounting migration must post or
+import those entries separately, then the runner can reconcile them.
 
-## Prerequisites
+## Fixture test
 
-- Odoo 20.0 with the `thaiacc` suite installed (target database)
-- A legacy 19.0 database reachable via a libpq DSN, containing the
-  `legacy19` schema subset the contract maps. For the deterministic
-  fixture: `l10n_th_migrate/fixture/legacy_19_fixture.sql`
+Use an isolated Odoo 20 database with `thaiacc` and `l10n_th_migrate`
+installed. Run with demo data because the fixture targets the ThaiACC demo
+partners and taxes:
 
-## Steps
+```bash
+DEMO=1 bash test/run_install_test.sh thaiacc l10n_th_migrate
+```
 
-1. **Load the fixture** (smoke only — a real migration points the DSN at the
-   actual legacy DB):
-   ```bash
-   psql -h db -U odoo -d postgres \
-        -c 'DROP DATABASE IF EXISTS thaiacc19_fixture'
-   psql -h db -U odoo -d postgres -c 'CREATE DATABASE thaiacc19_fixture'
-   psql -h db -U odoo -d thaiacc19_fixture \
-        -f "$(odoo path?) l10n_th_migrate/fixture/legacy_19_fixture.sql"
-   ```
-2. **Run 1 — master data** (Odoo shell or a server action):
-   ```python
-   run = env['l10n_th.migrate.run'].create({
-       'source_dsn': 'host=db user=odoo password=odoo dbname=thaiacc19_fixture',
-   })
-   run.action_run()
-   run.state, run.stats   # 'done' + reconciliation report
-   ```
-   Maps withholding taxes, PIT tables, branch identifiers, archives
-   legacy-only rows. Idempotent: matching by name / vat / reference.
-3. **Post the migrated accounting** on the 20.0 side (the legacy business
-   events re-posted with the mapped taxes) — the reconciliation needs the
-   official payment withholding lines to exist.
-4. **Run 2 — evidence + reconciliation**: `run.action_run()` again on a new
-   run record. Tax-invoice evidence lands on the matching vendor bills
-   (search is scoped to in_invoice/in_receipt — payment entries carry the
-   bill name in their ref too), and `run.stats['reconciliation']` compares
-   legacy withholding totals with the official lines; `matched` must be
-   true.
-3. **Reconcile**: `run.stats['reconciliation']` compares legacy withholding
-   evidence totals with the official payment withholding lines; `matched`
-   must be true. Legacy-only evidence (withholding moves, novat flags) is
-   archived verbatim in `l10n_th.migrate.archive`.
-5. **Automated equivalent**: `l10n_th_migrate/tests/test_migrate_e2e.py`
-   runs the whole sequence — fixture creation, two runs, reconciliation and
-   the source-untouched fingerprint — with:
-   ```bash
-   DEMO=1 bash test/run_install_test.sh l10n_th_migrate
-   ```
+The script recreates its named test database and PostgreSQL container. Do
+not run it against a shared database. The end-to-end test recreates
+`thaiacc19_fixture`; set `THAIACC_LEGACY_FIXTURE_DB` to an isolated name when
+running Odoo directly. The fixture SQL is
+`l10n_th_migrate/fixture/legacy_19_fixture.sql`.
 
-## Non-goals (per contract)
+## Two-run sequence
 
-- No legacy engine is revived; legacy-only evidence is archived.
-- Posted accounting on the target is never rewritten.
-- `novat` and WHT certificates remain archived history (see contract gaps).
+1. Install the target `thaiacc` meta package and `l10n_th_migrate` on Odoo
+   20. Configure the Thai chart and fiscal country.
+2. Point `source_dsn` at a legacy database. Grant the credential read-only
+   access. The runner calls `set_session(readonly=True)` as a second guard.
+   Current SQL expects a normalized `legacy19` schema shaped like the fixture.
+   A stock Odoo 19 database uses its own schema and cannot be passed directly;
+   build and validate read-only source views before a real database run.
+3. Run once to map WHT taxes, PIT brackets, branch identifiers, PND person or
+   company classification, and bank/PromptPay proxies. Legacy WHT moves,
+   `novat`, and 50 Tawi certificates are archived as read-only evidence.
+4. Migrate posted accounting through the accounting migration process.
+   Preserve historical postings and references. The test constructs mirror
+   documents only to exercise the reconciliation contract.
+5. Run again to attach vendor tax-invoice evidence and produce
+   `stats.reconciliation_summary`. Review every missing reference, debit and
+   credit delta, WHT delta, unresolved partner, and duplicate tax name.
+   `state=done` means this runner finished; it is **not** migration sign-off.
+6. Upgrade `thaiacc` on the migrated target database and verify registry
+   load, all module states, and accounting control totals independently.
+
+Example Odoo shell call:
+
+```python
+run = env["l10n_th.migrate.run"].create({
+    "source_dsn": "host=db user=readonly dbname=thaiacc19",
+})
+run.action_run()
+assert run.state == "done", run.error_message
+print(run.stats["reconciliation_summary"])
+```
+
+## Acceptance matrix from ThaiACC discussion seq 13
+
+| Item | Fixture evidence | Remaining gate |
+|---|---|---|
+| 1. Trial balance | Source posted debit and credit = 903,000; target document debit and credit are measured and checked separately | Explain every source-to-target journal total delta after full accounting import |
+| 2. Sales and purchase VAT | Customer output VAT 7,000 and official tax invoice; vendor CABA input VAT in two payments | Compare full source and target input/output VAT periods |
+| 3. PIT | Two payments: base 200,000 then 100,000; WHT 2,500 then 5,000 from official payment lines | Validate against a real legacy PIT cohort |
+| 4. PND | Fixture checks PND1/2/3/53 totals in the 2026 period | PND1A source designation is absent; manually classify or add a reliable source field |
+| 5. Cancel/reverse | Cancelled invoice and WHT move excluded from posted totals; target invoice cancellation checked | Add a genuine reversal pair with source and target journal evidence |
+| 6. Partial/CABA | Two payments, 40% and 60%, produce two official purchase tax invoices and 3,000 WHT total | Reconcile source and target VAT amounts per payment |
+| 7. PromptPay/bank | Bank account and tax-ID proxy map to official `proxy_type`/`proxy_value` | Check live QR rendering after actual bank-owner mapping |
+| 8. 50 Tawi history | Legacy certificates archived verbatim, no legacy engine revived | Confirm an official replacement or approve read-only historical access |
+| 9. Post-migration upgrade | `thaiacc` installed and registry loads in fixture test | Upgrade the migrated target *after* persistent accounting migration |
+| 10. No duplicates | Mapped tax names checked; a second runner pass does not add payment WHT lines | Reconcile canonical transaction identities against source import |
+| 11. Consolidated report | `stats.reconciliation_summary` records control totals, deltas, missing refs and unresolved partners | Resolve all review flags before sign-off |
+| 12. Documentation | This runbook and `MIGRATION-CONTRACT.md` record the expanded fixture and limits | Update with results from an actual 19 database |
+
+The fixture is synthetic. Its green test result proves the stated mapping
+paths and control checks, not a full production migration. No source ledger
+is rewritten. `novat` and historical certificates remain read-only evidence
+until their target policy is decided.

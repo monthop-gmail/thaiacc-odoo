@@ -85,6 +85,21 @@ class TestL10nTHPndReport(AccountTestInvoicingCommon):
         self.assertAlmostEqual(report.total_base_amount, 300000.0, 2)
         self.assertAlmostEqual(report.total_tax_amount, 13000.0, 2)
 
+    def test_individual_tax_number_does_not_force_pnd53(self):
+        # Odoo 20 derives is_company from VAT presence; a person's Thai tax
+        # number therefore needs an explicit PND classification.
+        self.individual.write({
+            'vat': '1234567890123',
+            'l10n_th_pnd_entity_type': 'person',
+        })
+        self.assertTrue(self.individual.is_company)
+        self.assertEqual(
+            self.env['l10n_th.pnd.report']._default_pnd_type(
+                self.individual, self.wht_service,
+            ),
+            'pnd2',
+        )
+
     def test_report_respects_period(self):
         self._pay_bill(self.individual, self.wht_service, 100000.0)
 

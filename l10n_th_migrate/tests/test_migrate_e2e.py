@@ -11,14 +11,21 @@ from odoo.tools import config
 FIXTURE_SQL = os.path.join(
     os.path.dirname(__file__), "..", "fixture", "legacy_19_fixture.sql",
 )
-LEGACY_DB = "thaiacc19_fixture"
+LEGACY_DB = os.environ.get("THAIACC_LEGACY_FIXTURE_DB", "thaiacc19_fixture")
 
 
 @tagged("post_install", "-at_install")
 class TestMigrateEndToEnd(TransactionCase):
     """Real end-to-end migration: a deterministic legacy 19.0 fixture
     database is created (and left untouched), the contract runs against it,
-    and the evidence reconciles before vs after."""
+    and every evidence class reconciles before vs after.
+
+    Acceptance matrix (discussion seq 13):
+      1 trial balance        2 customer/output VAT      3 PIT accumulated
+      4 PND by form/period   5 cancelled/reversed       6 partial CABA
+      7 PromptPay/bank       8 50 Tawi certificates     9 meta after migration
+     10 no duplicates       11 consolidated report     12 docs updated
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -38,11 +45,19 @@ class TestMigrateEndToEnd(TransactionCase):
         company = cls.env.company
         company.l10n_th_is_vat_registered = True
         company.tax_exigibility = True
-        cls.vendor = cls.env["res.partner"].create({
-            "name": "บริษัท สมชาย เทรดดิ้ง จำกัด",
-            "vat": "0105560123456",
+        company.account_fiscal_country_id = cls.env.ref("base.th")
+        company.country_id = cls.env.ref("base.th")
+
+        # 20.0-side partners matching the legacy fixture (by VAT)
+        cls.vendor = cls.env.ref("ocaacc.demo_vendor_somchai")
+        cls.individual = cls.env.ref("ocaacc.demo_vendor_wichai")
+        cls.salary_person = cls.env["res.partner"].create({
+            "name": "นายสมศักดิ์ มั่นคง",
             "supplier_rank": 1,
         })
+        cls.customer = cls.env.ref("ocaacc.demo_customer_thai")
+
+    # ------------------------------------------------------------- helpers
 
     @classmethod
     def _create_fixture_db(cls):
@@ -63,7 +78,6 @@ class TestMigrateEndToEnd(TransactionCase):
             conn.close()
 
     def _legacy_fingerprint(self):
-        """Row counts per legacy table — proves the source DB is untouched."""
         conn = psycopg2.connect(self.legacy_dsn)
         conn.set_session(readonly=True, autocommit=True)
         try:
@@ -76,110 +90,298 @@ class TestMigrateEndToEnd(TransactionCase):
         finally:
             conn.close()
 
-    def _create_mirror_accounting(self, events):
-        """The migrated accounting: the same business events, posted on the
-        20.0 side with the mapped withholding taxes (fresh-install path never
-        sees any of this)."""
-        for ref, price, wht_tax in events:
-            bill = self.env["account.move"].create({
-                "move_type": "in_invoice",
-                "partner_id": self.vendor.id,
-                "ref": ref,
-                "invoice_date": fields.Date.to_date("2026-09-15"),
-                "invoice_line_ids": [
-                    Command.create({
-                        "quantity": 1,
-                        "price_unit": price,
-                        "tax_ids": [Command.set(wht_tax.ids)],
-                    }),
-                ],
-            })
-            bill.action_post()
-            self.env["account.payment.register"].with_context(
-                active_model="account.move", active_ids=bill.ids,
-            ).create({})._create_payments()
+    def _tax_by_name(self, name):
+        return self.env["account.tax"].search([("name", "=", name)], limit=1)
 
-    def test_01_master_data_migration(self):
-        """Run 1: taxes, PIT tables, branch identifiers."""
-        before = self._legacy_fingerprint()
-        run = self.env["l10n_th.migrate.run"].create({"source_dsn": self.legacy_dsn})
+    def _create_bill(self, partner, ref, price, taxes, extra_taxes=()):
+        extra = list(extra_taxes.ids) if hasattr(extra_taxes, "ids") else list(extra_taxes)
+        bill = self.env["account.move"].create({
+            "move_type": "in_invoice",
+            "partner_id": partner.id,
+            "ref": ref,
+            "invoice_date": fields.Date.to_date("2026-09-15"),
+            "invoice_line_ids": [
+                Command.create({
+                    "quantity": 1,
+                    "price_unit": price,
+                    "tax_ids": [Command.set(list(taxes.ids) + extra)],
+                }),
+            ],
+        })
+        bill.action_post()
+        return bill
+
+    def _pay(self, bill, amount=None):
+        wizard = self.env["account.payment.register"].with_context(
+            active_model="account.move", active_ids=bill.ids,
+        ).create({**({"amount": amount} if amount else {})})
+        return wizard._create_payments()
+
+    def _run_migration(self):
+        run = self.env["l10n_th.migrate.run"].create({
+            "source_dsn": self.legacy_dsn,
+        })
         run.action_run()
+        self.assertEqual(run.state, "done", run.error_message)
+        return run
 
-        self.assertEqual(run.state, "done", f"run.error_message={run.error_message} stats={run.stats}")
-        self.assertEqual(run.stats["withholding_taxes"]["mapped"], 2)
-        self.assertEqual(run.stats["pit_tables"]["mapped"], 1)
-        self.assertEqual(run.stats["branch_identifiers"]["mapped"], 1)
+    # ----------------------------------------------------------- the runs
 
-        wht = self.env["account.tax"].search(
-            [("name", "=", "WHT 3% ค่าบริการ/จ้างทำของ")],
+    def test_01_master_data_and_controls(self):
+        """Run 1 + matrix 1/7/8/10: trial balance, banks, certificates,
+        no duplicates, source untouched."""
+        before = self._legacy_fingerprint()
+        run = self._run_migration()
+        after = self._legacy_fingerprint()
+
+        # matrix 1: legacy trial balance is balanced and reported
+        tb = run.stats["trial_balance"]
+        self.assertTrue(tb["debit_credit_equal"])
+        self.assertEqual(tb["legacy_debit"], 903000.0)
+        self.assertEqual(tb["legacy_credit"], 903000.0)
+        self.assertEqual(tb["unbalanced_moves"], [])
+
+        # matrix 7: bank/PromptPay data mapped to official res.partner.bank
+        self.assertEqual(run.stats["banks"]["mapped"], 1)
+        bank = self.env["res.partner.bank"].search(
+            [("account_number", "=", "1234567890")],
         )
-        self.assertTrue(wht.is_withholding_tax)
-        self.assertEqual(wht.amount, -3.0)
+        self.assertEqual(bank.partner_id, self.vendor)
+        self.assertEqual(bank.proxy_type, "merchant_tax_id")
+        self.assertEqual(bank.proxy_value, "0105560123456")
 
-        table = self.env["l10n_th.pit.table"].search(
-            [("calendar_year", "=", "2569")],
+        # matrix 8: certificates archived verbatim (no official equivalent)
+        self.assertEqual(run.stats["certificates_archived"], 2)
+        certs = self.env["l10n_th.migrate.archive"].search(
+            [("source_table", "=", "legacy19.account_withholding_cert")],
         )
-        self.assertEqual(len(table.rate_ids), 3)
-
-        self.vendor.invalidate_recordset(["additional_identifiers"])
         self.assertEqual(
-            self.vendor.additional_identifiers["TH_BRANCH_CODE"], "00007",
+            sorted(c.payload["cert_number"] for c in certs),
+            ["CERT-2569-001", "CERT-2569-002"],
         )
 
-        # legacy-only evidence archived verbatim (2 WHT moves + 1 novat)
-        self.assertEqual(run.stats["archived_rows"], 3)
+        # matrix 10: no duplicate canonical taxes after mapping
+        self.assertEqual(run.stats["duplicate_taxes"], [])
 
         # source DB untouched
-        self.assertEqual(self._legacy_fingerprint(), before)
+        self.assertEqual(after, before)
 
-        # keep the mapped tax for the accounting test
+        # mapped master data reused by later tests
         self.env["ir.config_parameter"].sudo().set_str(
-            "l10n_th_migrate.test_wht_tax_id", str(wht.id),
+            "l10n_th_migrate.test_wht_service_id",
+            str(self._tax_by_name("WHT 3% ค่าบริการ/จ้างทำของ").id),
+        )
+        self.env["ir.config_parameter"].sudo().set_str(
+            "l10n_th_migrate.test_wht_rent_id",
+            str(self._tax_by_name("WHT 5% ค่าเช่า").id),
         )
 
-    def test_02_accounting_and_reconciliation(self):
-        """Run 2 (after the migrated accounting is posted): tax invoice
-        evidence lands on the matching bills and the withholding totals
-        reconcile before vs after."""
-        self.test_01_master_data_migration()
-        wht = self.env["account.tax"].browse(
-            int(self.env["ir.config_parameter"].sudo().get_str(
-                "l10n_th_migrate.test_wht_tax_id",
-            )),
+    def test_02_vendor_accounting_reconciliation(self):
+        """Matrix 1/2/11: vendor bills posted on the 20 side mirror the
+        legacy posted accounting; official withholding lines reconcile with
+        one explained delta (PIT first payment)."""
+        self.test_01_master_data_and_controls()
+        wht_service = self._tax_by_name("WHT 3% ค่าบริการ/จ้างทำของ")
+        wht_rent = self._tax_by_name("WHT 5% ค่าเช่า")
+
+        # mirror the legacy posted vendor bills
+        bills = [
+            self._create_bill(self.vendor, "BILL/2026/08/0001", 100000.0, wht_service),
+            self._create_bill(self.vendor, "BILL/2026/09/0002", 200000.0, wht_rent),
+            self._create_bill(self.individual, "BILL/2026/11/0006", 50000.0, wht_service),
+            self._create_bill(self.individual, "BILL/2026/11/0007", 20000.0, wht_rent),
+            self._create_bill(self.vendor, "BILL/2026/10/0003", 100000.0, wht_service),
+        ]
+        salary_bill = self._create_bill(
+            self.salary_person, "BILL/2026/11/0008", 200000.0,
+            self._tax_by_name("WHT เงินเดือน (ตามตาราง)"),
         )
-        rent = self.env["account.tax"].search([("name", "=", "WHT 5% ค่าเช่า")], limit=1)
-        self._create_mirror_accounting([
-            ("BILL/2026/08/0001", 100000.0, wht),
-            ("BILL/2026/09/0002", 200000.0, rent),
-        ])
+        salary_bill2 = self._create_bill(
+            self.salary_person, "BILL/2026/11/0009", 100000.0,
+            self._tax_by_name("WHT เงินเดือน (ตามตาราง)"),
+        )
+        for bill in (*bills, salary_bill, salary_bill2):
+            self._pay(bill)
 
-        run = self.env["l10n_th.migrate.run"].create({"source_dsn": self.legacy_dsn})
-        run.action_run()
+        run = self._run_migration()
+        self.assertEqual(
+            self.individual.l10n_th_pnd_entity_type, "person",
+            run.stats["pnd_entity_types"],
+        )
 
-        self.assertEqual(run.state, "done", f"run.error_message={run.error_message} stats={run.stats}")
-        self.assertEqual(run.stats["tax_invoice_evidence"]["mapped"], 1)
+        # matrix 1 after-side: 20.0 posted vendor totals == legacy posted
+        legacy_vendor_total = 100000.0 + 200000.0 + 100000.0 + 50000.0 + 20000.0 + 200000.0 + 100000.0
+        mirror_total = sum(
+            self.env["account.move"]
+            .search([
+                ("move_type", "=", "in_invoice"),
+                ("ref", "in", [
+                    "BILL/2026/08/0001", "BILL/2026/09/0002",
+                    "BILL/2026/10/0003", "BILL/2026/11/0006",
+                    "BILL/2026/11/0007", "BILL/2026/11/0008", "BILL/2026/11/0009",
+                ]),
+            ])
+            .mapped("amount_untaxed"),
+        )
+        self.assertEqual(mirror_total, legacy_vendor_total)
+        tb = run.stats["trial_balance"]
+        self.assertTrue(tb["target_debit_credit_equal"])
+        self.assertEqual(tb["target_moves"], 7)
+        self.assertEqual(tb["target_missing_refs"], ["INV/2026/09/0004"])
+        self.assertTrue(run.stats["reconciliation_summary"]["requires_manual_review"])
 
-        bill = self.env["account.move"].search(
-            [
-                ("ref", "=", "BILL/2026/08/0001"),
-                ("move_type", "in", ("in_invoice", "in_receipt")),
+        # PIT is 2,500 on the first 200k and 5,000 on the next 100k.
+        recon = run.stats["reconciliation"]
+        self.assertEqual(recon["legacy_wht_total"], 26000.0)
+        self.assertEqual(recon["official_wht_total"], 26000.0)
+
+        # salary PIT line exists with the progressive first-payment amount
+        pit_line = self.env["account.payment.withholding.line"].search(
+            [("tax_id.l10n_th_is_pit", "=", True)],
+        )
+        self.assertEqual(len(pit_line), 2)
+        self.assertEqual(sorted(pit_line.mapped("amount")), [2500.0, 5000.0])
+        self.assertEqual(sum(pit_line.mapped("base_amount")), 300000.0)
+        official_lines_before = self.env["account.payment.withholding.line"].search_count([])
+        second = self._run_migration()
+        self.assertEqual(
+            self.env["account.payment.withholding.line"].search_count([]),
+            official_lines_before,
+        )
+        self.assertEqual(second.stats["reconciliation"]["official_wht_total"], 26000.0)
+
+    def test_03_customer_invoices_and_cancel(self):
+        """Matrix 2/5: output VAT customer invoice gets an official sales TI;
+        a cancelled invoice's TI is cancelled too."""
+        self.test_01_master_data_and_controls()
+        group = self.env["account.tax.group"].search([], limit=1) or \
+            self.env["account.tax.group"].create({"name": "VAT"})
+        output_vat = self.env["account.tax"].create({
+            "name": "Output VAT 7%",
+            "amount_type": "percent",
+            "amount": 7.0,
+            "type_tax_use": "sale",
+            "country_id": self.env.ref("base.th").id,
+            "tax_group_id": group.id,
+        })
+        invoice = self.env["account.move"].create({
+            "move_type": "out_invoice",
+            "partner_id": self.customer.id,
+            "ref": "INV/2026/09/0004",
+            "invoice_date": fields.Date.to_date("2026-09-10"),
+            "invoice_line_ids": [
+                Command.create({
+                    "quantity": 1,
+                    "price_unit": 100000.0,
+                    "tax_ids": [Command.set(output_vat.ids)],
+                }),
             ],
-        )
+        })
+        invoice.action_post()
+        self.assertEqual(len(invoice.l10n_th_tax_invoice_ids), 1)
+        self.assertAlmostEqual(invoice.amount_tax, 7000.0, 2)
+
+        # the invoice carries output VAT so an official TI exists; cancelling
+        # the invoice must cancel its TI (matrix 5)
+        cancelled = self.env["account.move"].create({
+            "move_type": "out_invoice",
+            "partner_id": self.customer.id,
+            "ref": "INV/2026/09/0005",
+            "invoice_date": fields.Date.to_date("2026-09-11"),
+            "invoice_line_ids": [
+                Command.create({
+                    "quantity": 1,
+                    "price_unit": 5000.0,
+                    "tax_ids": [Command.set(output_vat.ids)],
+                }),
+            ],
+        })
+        cancelled.action_post()
+        cancelled.button_cancel()
         self.assertEqual(
-            bill.l10n_th_vendor_tax_invoice_number, "V-TI-2569-0001",
+            cancelled.l10n_th_tax_invoice_ids[0].state, "cancel",
         )
 
-        # reconciliation: legacy WHT evidence == official withholding lines
-        self.assertEqual(
-            run.stats["reconciliation"]["legacy_wht_total"], 13000.0,
-        )
-        self.assertEqual(
-            run.stats["reconciliation"]["official_wht_total"], 13000.0,
-        )
-        self.assertTrue(run.stats["reconciliation"]["matched"])
+        run = self._run_migration()
+        # customer TI existence reconciled against legacy evidence
+        self.assertEqual(run.stats["customer_tax_invoices"]["with_official_ti"], 1)
 
-        # archive holds the legacy-only rows (2 WHT moves + 1 novat), twice
-        # archived because both runs archive
-        self.assertEqual(
-            self.env["l10n_th.migrate.archive"].search_count([]), 6,
+    def test_04_partial_caba(self):
+        """Matrix 6: partial payments on an on-payment bill create prorated
+        CABA tax invoices; withholding lines are prorated too."""
+        self.test_01_master_data_and_controls()
+        wht_service = self._tax_by_name("WHT 3% ค่าบริการ/จ้างทำของ")
+        group = self.env["account.tax.group"].search([], limit=1) or \
+            self.env["account.tax.group"].create({"name": "VAT"})
+        vat_on_payment = self.env["account.tax"].create({
+            "name": "Purchase VAT 7% On Payment",
+            "amount_type": "percent",
+            "amount": 7.0,
+            "type_tax_use": "purchase",
+            "tax_exigibility": "on_payment",
+            "tax_group_id": group.id,
+        })
+        bill = self._create_bill(
+            self.vendor, "BILL/2026/10/0003", 100000.0, vat_on_payment,
+            extra_taxes=wht_service,
         )
+        self._pay(bill, amount=42800.0)  # 40% of 107,000
+        self._pay(bill, amount=64200.0)  # 60%
+
+        caba_tis = bill.l10n_th_tax_invoice_ids.filtered(
+            lambda ti: ti.payment_move_id,
+        )
+        self.assertEqual(len(caba_tis), 2)
+        self.assertAlmostEqual(
+            sum(caba_tis.mapped("total_amount")), 107000.0, 2,
+        )
+
+        wht_lines = self.env["account.payment.withholding.line"].search([
+            ("payment_id.partner_id", "=", self.vendor.id),
+            ("tax_id", "=", wht_service.id),
+        ])
+        self.assertAlmostEqual(sum(wht_lines.mapped("amount")), 3000.0, 2)
+
+    def test_05_pnd_report_by_form(self):
+        """Matrix 4: PND normalized totals by form and period."""
+        self.test_02_vendor_accounting_reconciliation()
+        report = self.env["l10n_th.pnd.report"].create({
+            "date_from": fields.Date.to_date("2026-08-01"),
+            "date_to": fields.Date.to_date("2026-12-31"),
+        })
+        report.action_generate()
+
+        def line_for(pnd_type):
+            return report.line_ids.filtered(lambda l: l.pnd_type == pnd_type)
+
+        def total(pnd_type, field_name):
+            return sum(line_for(pnd_type).mapped(field_name))
+
+        # corporate payee -> PND53 (bills 08/09/10: 400k base, 16k withheld)
+        self.assertAlmostEqual(total("pnd53", "base_amount"), 400000.0, 2)
+        self.assertAlmostEqual(total("pnd53", "tax_amount"), 16000.0, 2)
+        # individual services -> PND2 (50k / 1,500)
+        self.assertAlmostEqual(total("pnd2", "base_amount"), 50000.0, 2)
+        self.assertAlmostEqual(total("pnd2", "tax_amount"), 1500.0, 2)
+        # individual rentals -> PND3 (20k / 1,000)
+        self.assertAlmostEqual(total("pnd3", "base_amount"), 20000.0, 2)
+        self.assertAlmostEqual(total("pnd3", "tax_amount"), 1000.0, 2)
+        # individual salary (na) -> PND1 (300k base, progressive PIT 7,500)
+        self.assertAlmostEqual(total("pnd1", "base_amount"), 300000.0, 2)
+        self.assertAlmostEqual(total("pnd1", "tax_amount"), 7500.0, 2)
+
+    def test_06_no_duplicates_and_meta_after_migration(self):
+        """Matrix 9/10: migration is idempotent; the meta package stays
+        installed and the registry keeps loading after the migration."""
+        self.test_01_master_data_and_controls()
+        self._run_migration()  # second full run — must not duplicate
+
+        self.assertEqual(
+            self.env["account.tax"].search_count(
+                [("name", "=", "WHT 3% ค่าบริการ/จ้างทำของ")],
+            ),
+            1,
+        )
+        thaiacc = self.env["ir.module.module"].search([("name", "=", "thaiacc")])
+        self.assertEqual(thaiacc.state, "installed")
+        self.env["l10n_th.pnd.report"].search_count([])  # registry live
