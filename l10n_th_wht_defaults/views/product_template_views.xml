@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2026 ThaiACC
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html) -->
+<odoo>
+    <record id="product_template_form_view_l10n_th_wht" model="ir.ui.view">
+        <field name="name">product.template.form.l10n.th.wht</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="account.product_template_form_view" />
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='supplier_taxes_id']" position="after">
+                <field
+                    name="l10n_th_supplier_wht_tax_id"
+                    options="{'no_create': True}"
+                    context="{'search_default_domestictax': True, 'append_fields': ['company_id']}"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>

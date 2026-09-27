@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2026 ThaiACC
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html) -->
+<odoo>
+    <record id="view_move_form_vendor_tax_invoice" model="ir.ui.view">
+        <field name="name">account.move.form.vendor.tax.invoice</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//page[@id='other_tab']" position="before">
+                <page
+                    id="l10n_th_vendor_tax_invoice_tab"
+                    string="Vendor Tax Invoice"
+                    name="l10n_th_vendor_tax_invoice"
+                    invisible="move_type not in ('in_invoice', 'in_receipt') or country_code != 'TH' or not l10n_th_is_vat_registered"
+                >
+                    <group>
+                        <group
+                            string="Vendor's Document"
+                            name="l10n_th_vendor_document"
+                        >
+                            <field
+                                name="l10n_th_vendor_tax_invoice_number"
+                                readonly="state != 'draft'"
+                            />
+                            <field
+                                name="l10n_th_vendor_tax_invoice_date"
+                                readonly="state != 'draft'"
+                            />
+                        </group>
+                    </group>
+                    <field name="l10n_th_tax_invoice_ids" readonly="1">
+                        <list>
+                            <field name="date" />
+                            <field name="tax_invoice_number" />
+                            <field name="reference" />
+                            <field name="total_amount" sum="Total Amount" />
+                            <field name="vat_amount" sum="Total VAT Amount" />
+                            <field
+                                name="state"
+                                widget="badge"
+                                decoration-success="state == 'posted'"
+                                decoration-danger="state == 'cancel'"
+                                decoration-info="state == 'draft'"
+                            />
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
