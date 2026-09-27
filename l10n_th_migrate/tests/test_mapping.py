@@ -97,11 +97,8 @@ class TestMappingContract(TransactionCase):
     def test_branch_identifier_mapping(self):
         # 5-digit codes pass through; short codes zero-pad; empty -> none
         self.assertEqual(
-            map_branch_identifier("00007"),
-            [{"scheme": "TH_BRANCH_CODE", "type": "TH_BRANCH_CODE", "value": "00007"}],
+            map_branch_identifier("00007"), {"TH_BRANCH_CODE": "00007"},
         )
-        self.assertEqual(
-            map_branch_identifier("314")[0]["value"], "00314",
-        )
-        self.assertEqual(map_branch_identifier(""), [])
-        self.assertEqual(map_branch_identifier(None), [])
+        self.assertEqual(map_branch_identifier("314")["TH_BRANCH_CODE"], "00314")
+        self.assertEqual(map_branch_identifier(""), {})
+        self.assertEqual(map_branch_identifier(None), {})

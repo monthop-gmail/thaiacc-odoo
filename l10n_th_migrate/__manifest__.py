@@ -10,7 +10,15 @@
     "author": "ThaiACC, Odoo Community Association (OCA)",
     "website": "https://github.com/monthop-gmail/thaiacc-odoo",
     "license": "AGPL-3",
-    "depends": ["l10n_th", "l10n_th_pit", "l10n_th_pnd_report"],
+    "depends": [
+        "l10n_th",
+        "l10n_th_purchase_tax_invoice",
+        "l10n_th_pit",
+        "l10n_th_pnd_report",
+    ],
+    "data": [
+        "security/ir.access.csv",
+    ],
     "installable": True,
     "auto_install": False,
     "development_status": "Beta",

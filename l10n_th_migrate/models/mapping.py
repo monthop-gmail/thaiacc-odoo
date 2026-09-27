@@ -44,14 +44,8 @@ def map_branch_identifier(company_registry):
     TH_BRANCH_CODE scheme."""
     value = (company_registry or "").strip()
     if not value:
-        return []
-    return [
-        {
-            "scheme": "TH_BRANCH_CODE",
-            "type": "TH_BRANCH_CODE",
-            "value": value.zfill(5),
-        },
-    ]
+        return {}
+    return {"TH_BRANCH_CODE": value.zfill(5)}
 
 
 def map_pit_table(legacy_table):
