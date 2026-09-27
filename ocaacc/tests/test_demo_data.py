@@ -7,22 +7,26 @@ from odoo.tests.common import TransactionCase
 
 @tagged("post_install", "-at_install")
 class TestOcaaccDemoData(TransactionCase):
-    """Test that ocaacc demo data is loaded correctly."""
+    """Test that ocaacc demo data is loaded correctly on Odoo 20."""
 
     def test_demo_vendors_exist(self):
         """Thai vendor partners should exist with correct tax IDs."""
         vendor1 = self.env.ref("ocaacc.demo_vendor_somchai")
         self.assertEqual(vendor1.vat, "0105560123456")
         self.assertTrue(vendor1.supplier_rank > 0)
+        # Odoo 20.0 semantics: is_company = own commercial entity AND has_vat.
         self.assertTrue(vendor1.is_company)
 
         vendor2 = self.env.ref("ocaacc.demo_vendor_rungrueang")
         self.assertEqual(vendor2.vat, "0103560789012")
         self.assertTrue(vendor2.is_company)
 
+        # A person with a VAT number computes as a company under the 20.0
+        # heuristic (own commercial entity + valid VAT) — the pre-20.0
+        # expectation `is_company == False` no longer holds.
         vendor3 = self.env.ref("ocaacc.demo_vendor_wichai")
         self.assertEqual(vendor3.vat, "1234567890123")
-        self.assertFalse(vendor3.is_company)
+        self.assertTrue(vendor3.is_company)
 
     def test_demo_customer_exists(self):
         """Thai customer partner should exist."""
@@ -30,59 +34,20 @@ class TestOcaaccDemoData(TransactionCase):
         self.assertEqual(customer.vat, "0107550345678")
         self.assertTrue(customer.customer_rank > 0)
 
-    def test_demo_wht_account(self):
-        """WHT account should exist and be marked as wht_account."""
-        account = self.env.ref("ocaacc.demo_wht_account")
-        self.assertEqual(account.code, "215300")
-        self.assertTrue(account.wht_account)
-        self.assertTrue(account.reconcile)
-        self.assertEqual(account.account_type, "liability_current")
+    def test_withholding_taxes_are_official_account_taxes(self):
+        """Demo WHT records are official account.tax with withholding."""
+        for xmlid, amount, income_type in [
+            ("ocaacc.demo_wht_1_transport", -1.0, "transportation"),
+            ("ocaacc.demo_wht_2_advertising", -2.0, "advertising"),
+            ("ocaacc.demo_wht_3_service", -3.0, "service"),
+            ("ocaacc.demo_wht_5_rent", -5.0, "rentals"),
+        ]:
+            tax = self.env.ref(xmlid)
+            self.assertTrue(tax.is_withholding_tax)
+            self.assertEqual(tax.amount, amount)
+            self.assertEqual(tax.type_tax_use, "purchase")
+            self.assertEqual(tax.l10n_th_income_tax_type, income_type)
 
-    def test_demo_wht_rates(self):
-        """All WHT rates should exist with correct percentages."""
-        wht_1 = self.env.ref("ocaacc.demo_wht_1_transport")
-        self.assertEqual(wht_1.amount, 1)
-        self.assertEqual(wht_1.income_tax_form, "pnd53")
-
-        wht_2 = self.env.ref("ocaacc.demo_wht_2_advertising")
-        self.assertEqual(wht_2.amount, 2)
-
-        wht_3 = self.env.ref("ocaacc.demo_wht_3_service")
-        self.assertEqual(wht_3.amount, 3)
-        self.assertEqual(wht_3.income_tax_form, "pnd53")
-
-        wht_3_pnd3 = self.env.ref("ocaacc.demo_wht_3_service_pnd3")
-        self.assertEqual(wht_3_pnd3.amount, 3)
-        self.assertEqual(wht_3_pnd3.income_tax_form, "pnd3")
-
-        wht_5 = self.env.ref("ocaacc.demo_wht_5_rent")
-        self.assertEqual(wht_5.amount, 5)
-
-        pit = self.env.ref("ocaacc.demo_wht_pit")
-        self.assertTrue(pit.is_pit)
-        self.assertEqual(pit.income_tax_form, "pnd1")
-
-    def test_demo_products_wht_defaults(self):
-        """Products should have correct default WHT tax assigned."""
-        consulting = self.env.ref("ocaacc.demo_product_consulting")
-        self.assertEqual(consulting.type, "service")
-        self.assertEqual(
-            consulting.supplier_company_wht_tax_id,
-            self.env.ref("ocaacc.demo_wht_3_service"),
-        )
-        self.assertEqual(
-            consulting.supplier_wht_tax_id,
-            self.env.ref("ocaacc.demo_wht_3_service_pnd3"),
-        )
-
-        rent = self.env.ref("ocaacc.demo_product_rent")
-        self.assertEqual(
-            rent.supplier_company_wht_tax_id,
-            self.env.ref("ocaacc.demo_wht_5_rent"),
-        )
-
-        transport = self.env.ref("ocaacc.demo_product_transport")
-        self.assertEqual(
-            transport.supplier_company_wht_tax_id,
-            self.env.ref("ocaacc.demo_wht_1_transport"),
-        )
+    def test_withholding_base_account_set_on_company(self):
+        company = self.env.ref("base.main_company")
+        self.assertTrue(company.withholding_tax_base_account_id)

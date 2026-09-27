@@ -1,27 +1,19 @@
+# Copyright 2025 Accsumana
+# License LGPL-3.0 or later (https://www.gnu.org/licenses/lgpl-3.0.html)
+
 {
-    "name": "OCA ACC - OCA Thai Accounting Suite",
+    "name": "ThaiACC - Official Thai Accounting Essentials",
     "version": "20.0.1.0.0",
-    "category": "Accounting/Localizations",
-    "summary": "Install all OCA Thai accounting modules in one click",
-    "author": "Accsumana",
-    "website": "https://sumana.online",
+    "category": "Localization / Accounting",
+    "summary": "Meta package: the official Odoo 20 Thai accounting stack "
+               "(chart, tax invoices, WHT engine, 50 Tawi, PromptPay QR)",
+    "author": "Accsumana, Odoo Community Association (OCA)",
+    "website": "https://github.com/monthop-gmail/thaiacc-odoo",
     "license": "LGPL-3",
-    "depends": [
-        "l10n_th",
-        "l10n_th_account_tax",
-        "l10n_th_account_tax_report",
-        "l10n_th_account_wht_cert_form",
-        "l10n_th_amount_to_text",
-        "l10n_th_base_sequence",
-        "l10n_th_base_utils",
-        "l10n_th_mis_report",
-        "l10n_th_partner",
-        "l10n_th_tier_department",
-    ],
-    "demo": [
-        "demo/demo_data.xml",
-    ],
+    "depends": ["l10n_th"],
+    "demo": ["demo/demo_data.xml"],
     "installable": True,
     "auto_install": False,
-    "application": True,
+    "development_status": "Beta",
+    "maintainers": ["monthop-gmail"],
 }

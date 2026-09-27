@@ -1,35 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ThaiACC suite demo: products carrying ThaiACC gap-module fields
+     (WHT defaults, progressive PIT) on top of the ocaacc official demo. -->
 <odoo>
     <data noupdate="1">
 
-        <!-- ============================================================ -->
-        <!--  Demo Vendor (NOVAT - ไม่จด VAT)                            -->
-        <!-- ============================================================ -->
-
+        <!-- Vendor (formerly NOVAT demo — the novat field lives in
+             l10n_th_company_novat, which is not part of the 20.0 suite yet) -->
         <record id="demo_vendor_novat" model="res.partner">
             <field name="name">ร้านป้าแก้ว ขายของชำ</field>
-            <field name="company_type">company</field>
             <field name="vat">0993560456789</field>
             <field name="street">12 ตลาดสด ถ.เพชรเกษม</field>
             <field name="city">นครปฐม</field>
             <field name="zip">73000</field>
             <field name="phone">034-567-890</field>
             <field name="supplier_rank">1</field>
-            <field name="novat" eval="True"/>
         </record>
 
-        <!-- ============================================================ -->
-        <!--  Demo Products for Expense                                   -->
-        <!-- ============================================================ -->
+        <!-- Progressive PIT tax (l10n_th_pit) for salary-type payments -->
+        <record id="demo_wht_pit_progressive" model="account.tax">
+            <field name="name">WHT PIT ขั้นบันได (บุคคลธรรมดา)</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-5.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">na</field>
+            <field name="l10n_th_is_pit" eval="True"/>
+        </record>
 
+        <!-- Products with ThaiACC default WHT (l10n_th_wht_defaults) -->
+        <record id="demo_product_consulting" model="product.template">
+            <field name="name">ค่าที่ปรึกษา</field>
+            <field name="type">service</field>
+            <field name="list_price">10000</field>
+            <field name="standard_price">10000</field>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_3_service"/>
+        </record>
+
+        <record id="demo_product_rent" model="product.template">
+            <field name="name">ค่าเช่าสำนักงาน</field>
+            <field name="type">service</field>
+            <field name="list_price">25000</field>
+            <field name="standard_price">25000</field>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_5_rent"/>
+        </record>
+
+        <record id="demo_product_transport" model="product.template">
+            <field name="name">ค่าขนส่ง</field>
+            <field name="type">service</field>
+            <field name="list_price">5000</field>
+            <field name="standard_price">5000</field>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_1_transport"/>
+        </record>
+
+        <record id="demo_product_advertising" model="product.template">
+            <field name="name">ค่าโฆษณา</field>
+            <field name="type">service</field>
+            <field name="list_price">15000</field>
+            <field name="standard_price">15000</field>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_2_advertising"/>
+        </record>
+
+        <!-- Expense products -->
         <record id="demo_product_repair" model="product.template">
             <field name="name">ค่าซ่อมบำรุง</field>
             <field name="type">service</field>
             <field name="list_price">8000</field>
             <field name="standard_price">8000</field>
             <field name="can_be_expensed" eval="True"/>
-            <field name="supplier_company_wht_tax_id" ref="ocaacc.demo_wht_3_service"/>
-            <field name="supplier_wht_tax_id" ref="ocaacc.demo_wht_3_service_pnd3"/>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_3_service"/>
         </record>
 
         <record id="demo_product_delivery" model="product.template">
@@ -38,7 +76,7 @@
             <field name="list_price">1500</field>
             <field name="standard_price">1500</field>
             <field name="can_be_expensed" eval="True"/>
-            <field name="supplier_company_wht_tax_id" ref="ocaacc.demo_wht_1_transport"/>
+            <field name="l10n_th_supplier_wht_tax_id" ref="ocaacc.demo_wht_1_transport"/>
         </record>
 
     </data>

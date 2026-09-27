@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Odoo 20 official-first demo: Thai partners, the withholding tax base
+     account, and withholding taxes as official account.tax records. -->
 <odoo>
     <data noupdate="1">
 
-        <!-- ============================================================ -->
-        <!--  Thai Vendor Partners                                        -->
-        <!-- ============================================================ -->
-
+        <!-- Thai Vendor Partners -->
         <record id="demo_vendor_somchai" model="res.partner">
             <field name="name">บริษัท สมชาย เทรดดิ้ง จำกัด</field>
-            <field name="company_type">company</field>
             <field name="vat">0105560123456</field>
             <field name="street">123 ถ.สุขุมวิท</field>
             <field name="city">กรุงเทพมหานคร</field>
@@ -19,145 +17,89 @@
 
         <record id="demo_vendor_rungrueang" model="res.partner">
             <field name="name">หจก. รุ่งเรือง คอนซัลแตนท์</field>
-            <field name="company_type">company</field>
             <field name="vat">0103560789012</field>
-            <field name="street">456 ถ.พหลโยธิน</field>
-            <field name="city">กรุงเทพมหานคร</field>
-            <field name="zip">10400</field>
-            <field name="phone">02-987-6543</field>
             <field name="supplier_rank">1</field>
         </record>
 
         <record id="demo_vendor_wichai" model="res.partner">
             <field name="name">นายวิชัย ใจดี</field>
-            <field name="company_type">person</field>
             <field name="vat">1234567890123</field>
-            <field name="street">789 ซ.ลาดพร้าว 42</field>
-            <field name="city">กรุงเทพมหานคร</field>
-            <field name="zip">10230</field>
-            <field name="phone">081-234-5678</field>
             <field name="supplier_rank">1</field>
         </record>
 
         <record id="demo_customer_thai" model="res.partner">
             <field name="name">บริษัท ลูกค้าไทย จำกัด (มหาชน)</field>
-            <field name="company_type">company</field>
             <field name="vat">0107550345678</field>
-            <field name="street">99 อาคารสาทร ชั้น 15</field>
-            <field name="city">กรุงเทพมหานคร</field>
-            <field name="zip">10120</field>
-            <field name="phone">02-555-7890</field>
             <field name="customer_rank">1</field>
         </record>
 
-        <!-- ============================================================ -->
-        <!--  WHT Account                                                 -->
-        <!-- ============================================================ -->
-
+        <!-- Withholding tax base account + company setting (official
+             l10n_account_withholding_tax engine requirement) -->
         <record id="demo_wht_account" model="account.account">
-            <field name="code">215300</field>
+            <field name="code">213999</field>
             <field name="name">ภาษีหัก ณ ที่จ่ายค้างจ่าย</field>
             <field name="account_type">liability_current</field>
-            <field name="wht_account" eval="True"/>
             <field name="reconcile" eval="True"/>
         </record>
 
-        <!-- ============================================================ -->
-        <!--  Withholding Tax Rates                                       -->
-        <!-- ============================================================ -->
+        <record id="base.main_company" model="res.company">
+            <field name="withholding_tax_base_account_id" ref="demo_wht_account"/>
+        </record>
 
-        <!-- WHT 1% - ค่าขนส่ง (Section 3 Tredecies) -->
-        <record id="demo_wht_1_transport" model="account.withholding.tax">
+        <!-- Withholding taxes as official account.tax records
+             (account.tax.is_withholding_tax engine) -->
+        <record id="demo_wht_1_transport" model="account.tax">
             <field name="name">WHT 1% ค่าขนส่ง</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">1</field>
-            <field name="income_tax_form">pnd53</field>
-            <field name="wht_cert_income_type">5</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-1.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">transportation</field>
         </record>
 
-        <!-- WHT 2% - ค่าโฆษณา (Section 3 Tredecies) -->
-        <record id="demo_wht_2_advertising" model="account.withholding.tax">
+        <record id="demo_wht_2_advertising" model="account.tax">
             <field name="name">WHT 2% ค่าโฆษณา</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">2</field>
-            <field name="income_tax_form">pnd53</field>
-            <field name="wht_cert_income_type">5</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-2.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">advertising</field>
         </record>
 
-        <!-- WHT 3% - ค่าบริการ / จ้างทำของ (Section 3 Tredecies) -->
-        <record id="demo_wht_3_service" model="account.withholding.tax">
+        <record id="demo_wht_3_service" model="account.tax">
             <field name="name">WHT 3% ค่าบริการ/จ้างทำของ</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">3</field>
-            <field name="income_tax_form">pnd53</field>
-            <field name="wht_cert_income_type">5</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-3.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">service</field>
         </record>
 
-        <!-- WHT 3% - ค่าบริการ บุคคลธรรมดา (PND3) -->
-        <record id="demo_wht_3_service_pnd3" model="account.withholding.tax">
+        <record id="demo_wht_3_service_person" model="account.tax">
             <field name="name">WHT 3% ค่าบริการ (บุคคลธรรมดา)</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">3</field>
-            <field name="income_tax_form">pnd3</field>
-            <field name="wht_cert_income_type">5</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-3.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">service</field>
         </record>
 
-        <!-- WHT 5% - ค่าเช่า (Section 3 Tredecies) -->
-        <record id="demo_wht_5_rent" model="account.withholding.tax">
+        <record id="demo_wht_5_rent" model="account.tax">
             <field name="name">WHT 5% ค่าเช่า</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">5</field>
-            <field name="income_tax_form">pnd53</field>
-            <field name="wht_cert_income_type">5</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-5.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">rentals</field>
         </record>
 
-        <!-- PIT - ภาษีเงินได้บุคคลธรรมดาหัก ณ ที่จ่าย (PND1) -->
-        <record id="demo_wht_pit" model="account.withholding.tax">
-            <field name="name">PIT หัก ณ ที่จ่ายเงินเดือน</field>
-            <field name="account_id" ref="demo_wht_account"/>
-            <field name="amount">0</field>
-            <field name="is_pit" eval="True"/>
-            <field name="income_tax_form">pnd1</field>
-            <field name="wht_cert_income_type">1</field>
-        </record>
-
-        <!-- ============================================================ -->
-        <!--  Demo Products with default WHT                              -->
-        <!-- ============================================================ -->
-
-        <record id="demo_product_consulting" model="product.template">
-            <field name="name">ค่าที่ปรึกษา</field>
-            <field name="type">service</field>
-            <field name="list_price">10000</field>
-            <field name="standard_price">10000</field>
-            <field name="supplier_company_wht_tax_id" ref="demo_wht_3_service"/>
-            <field name="supplier_wht_tax_id" ref="demo_wht_3_service_pnd3"/>
-        </record>
-
-        <record id="demo_product_rent" model="product.template">
-            <field name="name">ค่าเช่าสำนักงาน</field>
-            <field name="type">service</field>
-            <field name="list_price">25000</field>
-            <field name="standard_price">25000</field>
-            <field name="supplier_company_wht_tax_id" ref="demo_wht_5_rent"/>
-            <field name="supplier_wht_tax_id" ref="demo_wht_5_rent"/>
-        </record>
-
-        <record id="demo_product_transport" model="product.template">
-            <field name="name">ค่าขนส่ง</field>
-            <field name="type">service</field>
-            <field name="list_price">5000</field>
-            <field name="standard_price">5000</field>
-            <field name="supplier_company_wht_tax_id" ref="demo_wht_1_transport"/>
-            <field name="supplier_wht_tax_id" ref="demo_wht_1_transport"/>
-        </record>
-
-        <record id="demo_product_advertising" model="product.template">
-            <field name="name">ค่าโฆษณา</field>
-            <field name="type">service</field>
-            <field name="list_price">15000</field>
-            <field name="standard_price">15000</field>
-            <field name="supplier_company_wht_tax_id" ref="demo_wht_2_advertising"/>
+        <record id="demo_wht_pit_salary" model="account.tax">
+            <field name="name">WHT PIT เงินเดือน (ดูตารางขั้นบันได)</field>
+            <field name="amount_type">percent</field>
+            <field name="amount">-5.0</field>
+            <field name="type_tax_use">purchase</field>
+            <field name="is_withholding_tax" eval="True"/>
+            <field name="l10n_th_income_tax_type">na</field>
         </record>
 
     </data>
