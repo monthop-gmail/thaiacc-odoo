@@ -11,7 +11,7 @@
 |---|---|
 | [OCA wiki — Migration to version 20.0](https://github.com/OCA/maintainer-tools/wiki/Migration-to-version-20.0) | ขั้นตอน process: branch naming, วิธีพก history, commit/PR conventions, สิ่งที่ **ห้าม** ทำ |
 | [OCA wiki — Migration to version 19.0](https://github.com/OCA/maintainer-tools/wiki/Migration-to-version-19.0) | Checklist framework changes — เราผ่านมาแล้วตอน migrate 19.0 (ผล scan §3) ใช้เป็น **regression checklist** ย้ำตอนรีวิว PR |
-| `odoo-19-migration-guide/` (repo ของทีม) | Workflow scan → auto-fix → validate ตาม `migration-rules.yaml` — จะต่อยอดเป็น odoo-20-migration-guide (§5) |
+| [`odoo-migration-guide/`](https://github.com/monthop-gmail/odoo-migration-guide) (repo ของทีม, เดิมชื่อ odoo-19-migration-guide) | Workflow scan → auto-fix → validate ตาม `migration-rules.yaml`; กฏ 19→20 จากงานนี้ถูก seed ไว้ที่ `transitions/19-to-20/` แล้ว (PR #1 merged) |
 | [OpenUpgrade](https://github.com/OCA/OpenUpgrade) `upgrade_analysis.txt` | อ้าง data-model changes — **ยังไม่มี branch 20.0** (ณ 26 ก.ย.) ชั่วคราว diff จาก source จริง (มี `odoo-src/` clone 20.0 ไว้แล้ว) |
 
 ข้อกฏทีม (จาก thaiacc-workspace `CLAUDE.md`) ยังบังคับเหมือนเดิม: **1 PR ต่อ 1 โมดูล**, **พก commit history ครบ + `[MIG]` commit เดียวด้านบน**, `Assisted-by:` trailer (ไม่ใช่ Co-authored-by), **ห้าม vendor dependency ที่ยังไม่ release** ใส่ branch เพื่อดัน CI, และ branch `*mig-*` บน fork คือ PR สด — ระวัง force-push
