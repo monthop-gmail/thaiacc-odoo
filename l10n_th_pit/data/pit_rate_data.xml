@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Thai progressive PIT brackets (Revenue Department). Per-year tables;
+     add a new record when rates change. -->
+<odoo noupdate="1">
+    <record id="thailand_pit_2026" model="l10n_th.pit.table">
+        <field name="calendar_year">2026</field>
+    </record>
+
+    <record id="thailand_pit_2026_r0" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">1</field>
+        <field name="income_from">0.0</field>
+        <field name="income_to">150000.0</field>
+        <field name="tax_rate">0.0</field>
+    </record>
+    <record id="thailand_pit_2026_r5" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">2</field>
+        <field name="income_from">150000.0</field>
+        <field name="income_to">300000.0</field>
+        <field name="tax_rate">5.0</field>
+    </record>
+    <record id="thailand_pit_2026_r10" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">3</field>
+        <field name="income_from">300000.0</field>
+        <field name="income_to">500000.0</field>
+        <field name="tax_rate">10.0</field>
+    </record>
+    <record id="thailand_pit_2026_r15" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">4</field>
+        <field name="income_from">500000.0</field>
+        <field name="income_to">750000.0</field>
+        <field name="tax_rate">15.0</field>
+    </record>
+    <record id="thailand_pit_2026_r20" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">5</field>
+        <field name="income_from">750000.0</field>
+        <field name="income_to">1000000.0</field>
+        <field name="tax_rate">20.0</field>
+    </record>
+    <record id="thailand_pit_2026_r25" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">6</field>
+        <field name="income_from">1000000.0</field>
+        <field name="income_to">2000000.0</field>
+        <field name="tax_rate">25.0</field>
+    </record>
+    <record id="thailand_pit_2026_r30" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">7</field>
+        <field name="income_from">2000000.0</field>
+        <field name="income_to">5000000.0</field>
+        <field name="tax_rate">30.0</field>
+    </record>
+    <record id="thailand_pit_2026_r35" model="l10n_th.pit.rate">
+        <field name="table_id" ref="thailand_pit_2026" />
+        <field name="sequence">8</field>
+        <field name="income_from">5000000.0</field>
+        <field name="income_to">999999999.0</field>
+        <field name="tax_rate">35.0</field>
+    </record>
+</odoo>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="l10n_th_pnd_report_view_list" model="ir.ui.view">
+        <field name="name">l10n_th.pnd.report.list</field>
+        <field name="model">l10n_th.pnd.report</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="date_from" />
+                <field name="date_to" />
+                <field name="company_id" groups="base.group_multi_company" />
+                <field name="total_base_amount" sum="Total" />
+                <field name="total_tax_amount" sum="Total" />
+                <field name="state" widget="badge" decoration-success="state == 'done'" />
+            </list>
+        </field>
+    </record>
+
+    <record id="l10n_th_pnd_report_view_form" model="ir.ui.view">
+        <field name="name">l10n_th.pnd.report.form</field>
+        <field name="model">l10n_th.pnd.report</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button
+                        name="action_generate"
+                        string="Generate from Withholding Data"
+                        type="object"
+                        class="btn-primary"
+                        invisible="state == 'done'"
+                    />
+                    <field name="state" widget="statusbar" />
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="date_from" readonly="state == 'done'" />
+                            <field name="date_to" readonly="state == 'done'" />
+                        </group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company" />
+                            <field name="currency_id" invisible="1" />
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Lines" name="lines">
+                            <field name="line_ids" readonly="state == 'done'">
+                                <list editable="bottom">
+                                    <field name="pnd_type" />
+                                    <field name="partner_id" />
+                                    <field name="tax_id" />
+                                    <field name="income_tax_type" optional="hide" />
+                                    <field name="payment_count" sum="Payments" />
+                                    <field name="base_amount" sum="Total Income" />
+                                    <field name="tax_amount" sum="Total Withheld" />
+                                    <field name="company_id" column_invisible="1" />
+                                </list>
+                            </field>
+                            <group class="oe_subtotal_footer">
+                                <field name="total_base_amount" />
+                                <field name="total_tax_amount" />
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="l10n_th_pnd_report_action" model="ir.actions.act_window">
+        <field name="name">Withholding Returns (PND)</field>
+        <field name="res_model">l10n_th.pnd.report</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_l10n_th_pnd_report"
+        name="Withholding Returns (PND)"
+        parent="account.menu_finance_reports"
+        action="l10n_th_pnd_report_action"
+        sequence="60"
+    />
+</odoo>

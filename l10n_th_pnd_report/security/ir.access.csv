@@ -1,0 +1,7 @@
+id,name,model_id,group_id/id,operation,domain
+l10n_th_pnd_report_account_invoice,l10n_th.pnd.report account invoice,l10n_th.pnd.report,account.group_account_invoice,crud,
+l10n_th_pnd_report_readonly,l10n_th.pnd.report readonly,l10n_th.pnd.report,account.group_account_readonly,r,
+l10n_th_pnd_report_line_account_invoice,l10n_th.pnd.report.line account invoice,l10n_th.pnd.report.line,account.group_account_invoice,crud,
+l10n_th_pnd_report_line_readonly,l10n_th.pnd.report.line readonly,l10n_th.pnd.report.line,account.group_account_readonly,r,
+l10n_th_pnd_report_comp_rule,l10n_th.pnd.report multi-company,l10n_th.pnd.report,,crud,"[('company_id', 'in', company_ids)]"
+l10n_th_pnd_report_line_comp_rule,l10n_th.pnd.report.line multi-company,l10n_th.pnd.report.line,,crud,"[('company_id', 'in', company_ids)]"

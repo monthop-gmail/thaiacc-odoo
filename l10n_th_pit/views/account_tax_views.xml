@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2026 ThaiACC
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html) -->
+<odoo>
+    <record id="view_tax_form_inherit_l10n_th_pit" model="ir.ui.view">
+        <field name="name">account.tax.form.l10n.th.pit</field>
+        <field name="model">account.tax</field>
+        <field name="inherit_id" ref="l10n_th.view_tax_form_inherit_l10n_th" />
+        <field name="arch" type="xml">
+            <xpath
+                expr="//field[@name='l10n_th_income_tax_type']"
+                position="after"
+            >
+                <field
+                    name="l10n_th_is_pit"
+                    invisible="not is_withholding_tax or type_tax_use != 'purchase' or country_code != 'TH'"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>
