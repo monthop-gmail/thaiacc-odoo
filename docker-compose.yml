@@ -17,6 +17,10 @@ services:
       - HOST=db
       - USER=odoo
       - PASSWORD=odoo
+      # official = Odoo 20 official-only baseline (no OCA aggregation,
+      # installs the core l10n_th chart); aggregate = full gitaggregate
+      # flow + thaiacc meta-package
+      - THAIACC_PROFILE=official
     restart: unless-stopped
 
   db:
