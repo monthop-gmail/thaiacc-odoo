@@ -1,13 +1,13 @@
-# ThaiACC — โมดูลบัญชีไทยสำหรับ Odoo 20 (WIP migration)
+# ThaiACC — โมดูลบัญชีไทยสำหรับ Odoo 20 (official-first)
 
-โมดูลบัญชีไทยที่ migrate และปรับแต่งสำหรับ Odoo 19 สร้างบน [OCA/l10n-thailand](https://github.com/OCA/l10n-thailand)
+ThaiACC บน Odoo 20 สร้างตามสถาปัตยกรรม **official-first**: ใช้โมดูล official ของ Odoo 20 (`l10n_th`, WHT engine, tax invoice) เป็นหลัก แล้วเสริมเฉพาะช่องว่างของไทยด้วยโมดูลของ ThaiACC — สถานะและรายละเอียดดูที่ [MIGRATION-20.0.md](MIGRATION-20.0.md)
 
 ## Quick Start (GitHub Codespaces)
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/monthop-gmail/thaiacc-odoo?ref=20.0)
 
 1. กดปุ่มด้านบน หรือไปที่ **Code > Codespaces > Create codespace on 20.0**
-2. รอ build (~3-5 นาที) — ระบบจะ start Odoo 19 + PostgreSQL + ดึง OCA modules + init ให้อัตโนมัติ
+2. รอ build (~3-5 นาที) — ระบบจะ start Odoo 20 + PostgreSQL และติดตั้ง `l10n_th` official ให้อัตโนมัติ (โปรไฟล์ official-only; โปรไฟล์ aggregate เดิมยังอยู่ผ่าน `THAIACC_PROFILE=aggregate`)
 3. เปิด browser ที่ port 8069 — พร้อมใช้งาน!
 4. Login: **admin / admin**
 
@@ -70,7 +70,7 @@
 
 ### วิธี A: GitHub Codespaces (แนะนำ)
 
-กดปุ่ม **Code > Codespaces > Create codespace on 20.0** บน GitHub แล้วรอ — ได้ Odoo 19 + PostgreSQL + OCA modules พร้อมใช้เลย ไม่ต้องพิมพ์ command เพิ่มเติม
+กดปุ่ม **Code > Codespaces > Create codespace on 20.0** บน GitHub แล้วรอ — ได้ Odoo 20 + PostgreSQL + `l10n_th` official พร้อมใช้เลย ไม่ต้องพิมพ์ command เพิ่มเติม
 
 เปิด browser ที่ port 8069 → Login: **admin / admin**
 
@@ -78,7 +78,7 @@
 
 ```bash
 # Clone repo นี้
-git clone -b 19.0 https://github.com/monthop-gmail/thaiacc-odoo.git
+git clone -b 20.0 https://github.com/monthop-gmail/thaiacc-odoo.git
 cd thaiacc-odoo
 
 # ติดตั้ง gitaggregate แล้วดึง OCA dependencies
@@ -92,7 +92,7 @@ addons_path = /path/to/thaiacc-odoo,/path/to/thaiacc-odoo/l10n-thailand,/path/to
 ### วิธี C: Docker Compose (สำหรับทดสอบ)
 
 ```bash
-git clone -b 19.0 https://github.com/monthop-gmail/thaiacc-odoo.git
+git clone -b 20.0 https://github.com/monthop-gmail/thaiacc-odoo.git
 cd thaiacc-odoo
 docker compose up -d --build
 ```

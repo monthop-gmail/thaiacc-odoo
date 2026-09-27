@@ -1,4 +1,7 @@
-# ThaiACC Odoo 19 - คู่มือทดสอบ
+# ThaiACC - คู่มือทดสอบ
+
+> Branch `20.0` (Odoo 20, official-only baseline): รันชุดทดสอบอัตโนมัติได้ด้วย `test/official_smoke_test.sh` และ `test/run_install_test.sh <modules>`; สถานะ E20 ดูที่ MIGRATION-20.0.md — ส่วนด้านล่างเป็นคู่มือทดสอบ manual ของชุด 19.0 เดิม
+
 
 ## สถานะการติดตั้ง
 
