@@ -87,7 +87,10 @@ until their target policy is decided.
 No usable old Odoo 19 database or Docker volume was found under
 `../odoo-thaiacc` or `../odoo-thaiacc-test`. An isolated Odoo 19 database was
 created from the 19.0 ThaiACC code and installed with the Thai chart and
-ThaiACC modules. A company-specific vendor bill was posted through the Odoo
+ThaiACC modules. The database was then upgraded with the current
+`monthop-gmail/thaiacc-odoo` 19.0 branch at commit `abd970f` (2026-09-02);
+the OCA dependency checkout is retained from the old test directory. A
+company-specific vendor bill was posted through the Odoo
 ORM, paid with 3% withholding tax, and issued a 50 Tawi certificate. The
 source views returned one WHT tax, one WHT move (base 100,000; WHT 3,000), one
 vendor bill, two bill journal lines, one partner, one bank proxy, one issued
@@ -95,10 +98,11 @@ certificate, one PIT table, and eight PIT rates. All 11 view queries executed.
 
 The Odoo 19 certificate relationship uses the certificate's payment journal
 and partner, not `account_withholding_move.cert_id`; the adapter reflects that
-verified relationship. The clone contains no VAT tax-invoice evidence, and it
-is a newly seeded cohort rather than historical business data. The remaining
-acceptance gates above still require a real source snapshot and a posted
-accounting import on the Odoo 20 target.
+verified relationship. A second Odoo 19 vendor bill was posted with 7,000
+input VAT and tax invoice `VAT-MIG-19-001`; the source view returned the number,
+date, and correct bill reference. This is a newly seeded cohort rather than
+historical business data. The remaining acceptance gates above still require
+a real source snapshot and a posted accounting import on the Odoo 20 target.
 
 The Odoo 20 runner was executed twice against this clone. Before the target
 bill was posted, it reported the missing bill reference, debit and credit
@@ -107,5 +111,12 @@ payment were posted through the Odoo 20 ORM, the second run reported one
 source and one target document, debit and credit of 100,000 on each side,
 WHT 3,000 on each side, no missing reference, no duplicate mapped tax, and
 `requires_manual_review=False` for the rows in this seeded cohort. This
-zero-delta result does not cover VAT, cancellations, partial payments, or
-historic transaction identity because the new clone has none of those rows.
+first zero-delta result did not cover VAT. After posting the matching 107,000
+VAT bill on Odoo 20, a further run mapped the vendor tax-invoice number and
+date onto the target bill. Source and target document debit and credit totals
+were 207,000 each, WHT stayed 3,000 each, and all reported deltas were zero.
+The bill journal lines also matched by account code on both sides:
+`611100` debit 200,000, `114200` input VAT debit 7,000, and `212100`
+payables credit 207,000.
+The clone still has no sales VAT, cancellations, partial payments, or historic
+transaction identities, so those acceptance items remain open.
