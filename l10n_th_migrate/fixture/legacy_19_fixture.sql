@@ -147,11 +147,17 @@ CREATE TABLE legacy19.account_tax_invoice_evidence (
     id integer PRIMARY KEY,
     bill_reference varchar NOT NULL,
     tax_invoice_number varchar NOT NULL,
-    tax_invoice_date date NOT NULL
+    tax_invoice_date date NOT NULL,
+    is_cash_basis boolean NOT NULL DEFAULT false,
+    vat_amount numeric
 );
 INSERT INTO legacy19.account_tax_invoice_evidence (id, bill_reference, tax_invoice_number, tax_invoice_date) VALUES
     (20, 'BILL/2026/08/0001', 'V-TI-2569-0001', '2026-08-01'),
     (21, 'INV/2026/09/0004', 'TINV-2569-0007', '2026-09-10');
+INSERT INTO legacy19.account_tax_invoice_evidence
+    (id, bill_reference, tax_invoice_number, tax_invoice_date, is_cash_basis, vat_amount) VALUES
+    (22, 'BILL/2026/10/0003', 'V-CABA-2569-40', '2026-10-25', true, 2800.0),
+    (23, 'BILL/2026/10/0003', 'V-CABA-2569-60', '2026-10-26', true, 4200.0);
 
 -- ------------------------------------------------- legacy PIT (matrix 3)
 CREATE TABLE legacy19.personal_income_tax (

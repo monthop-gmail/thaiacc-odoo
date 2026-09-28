@@ -69,7 +69,7 @@ print(run.stats["reconciliation_summary"])
 | 3. PIT | Two payments: base 200,000 then 100,000; WHT 2,500 then 5,000 from official payment lines | Validate against a real legacy PIT cohort |
 | 4. PND | Fixture checks PND1/2/3/53 totals in the 2026 period | PND1A source designation is absent; manually classify or add a reliable source field |
 | 5. Cancel/reverse | Cancelled invoice and WHT move excluded from posted totals; target invoice cancellation checked | Add a genuine reversal pair with source and target journal evidence |
-| 6. Partial/CABA | Two payments, 40% and 60%, produce two official purchase tax invoices and 3,000 WHT total | Reconcile source and target VAT amounts per payment |
+| 6. Partial/CABA | Two payments, 40% and 60%, produce two official purchase tax invoices and 3,000 WHT total | Real 19.0 clone check below found a 2,800 VAT delta on the second payment; investigate source posting before sign-off |
 | 7. PromptPay/bank | Bank account and tax-ID proxy map to official `proxy_type`/`proxy_value` | Check live QR rendering after actual bank-owner mapping |
 | 8. 50 Tawi history | Legacy certificates archived verbatim, no legacy engine revived | Confirm an official replacement or approve read-only historical access |
 | 9. Post-migration upgrade | `thaiacc` installed and registry loads in fixture test | Upgrade the migrated target *after* persistent accounting migration |
@@ -127,6 +127,22 @@ state and company, which matters when a cancelled target invoice shares a
 reference with the posted replacement. The final source and target document
 debit and credit totals were 314,000 each, with no reported deltas.
 
-Partial CABA payments, a genuine reversal pair, PIT payment history, PND
-period totals, and historic transaction identities are not represented by
-this new clone cohort; those acceptance items remain open.
+The clone was then extended with an on-payment VAT bill of 107,000, paid in
+two installments of 42,800 and 64,200. Odoo 19 created two CABA tax invoices.
+The source view now follows `tax_cash_basis_origin_move_id` from each CABA
+journal to its original bill and preserves each tax invoice and VAT amount
+separately. The first source installment recorded VAT 2,800 and matched the
+Odoo 20 official tax invoice, so its number `CABA-MIG-19-40` was mapped.
+The second source installment recorded VAT 7,000 while the Odoo 20 official
+tax invoice recorded 4,200. Source CABA VAT totals 9,800; target totals
+7,000. The runner archives both source CABA rows, leaves the second target
+number unset, and reports source ID 5 unresolved with `caba_vat_delta=-2800`
+and `requires_manual_review=True`. The posted bill document debit and credit
+controls still match at 421,000 on each side. This is an observed result in
+the seeded Odoo 19 clone and needs investigation before any live migration.
+The corresponding consistent fixture (VAT 2,800 + 4,200) maps both numbers;
+the focused CABA test and the full `l10n_th_migrate` suite passed (11/11).
+
+A genuine reversal pair, PIT payment history, PND period totals, and historic
+transaction identities are not represented by this new clone cohort; those
+acceptance items remain open.

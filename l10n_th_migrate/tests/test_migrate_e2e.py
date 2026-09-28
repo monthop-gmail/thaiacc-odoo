@@ -144,7 +144,10 @@ class TestMigrateEndToEnd(TransactionCase):
         # matrix 7: bank/PromptPay data mapped to official res.partner.bank
         self.assertEqual(run.stats["banks"]["mapped"], 1)
         bank = self.env["res.partner.bank"].search(
-            [("account_number", "=", "1234567890")],
+            [
+                ("account_number", "=", "1234567890"),
+                ("partner_id", "=", self.vendor.id),
+            ],
         )
         self.assertEqual(bank.partner_id, self.vendor)
         self.assertEqual(bank.proxy_type, "merchant_tax_id")
@@ -153,7 +156,10 @@ class TestMigrateEndToEnd(TransactionCase):
         # matrix 8: certificates archived verbatim (no official equivalent)
         self.assertEqual(run.stats["certificates_archived"], 2)
         certs = self.env["l10n_th.migrate.archive"].search(
-            [("source_table", "=", "legacy19.account_withholding_cert")],
+            [
+                ("source_table", "=", "legacy19.account_withholding_cert"),
+                ("run_id", "=", run.id),
+            ],
         )
         self.assertEqual(
             sorted(c.payload["cert_number"] for c in certs),
@@ -341,6 +347,17 @@ class TestMigrateEndToEnd(TransactionCase):
             ("tax_id", "=", wht_service.id),
         ])
         self.assertAlmostEqual(sum(wht_lines.mapped("amount")), 3000.0, 2)
+
+        run = self._run_migration()
+        caba = run.stats["caba_tax_invoices"]
+        self.assertEqual(caba["mapped"], 2)
+        self.assertEqual(caba["unresolved"], [])
+        self.assertEqual(caba["source_vat"], 7000.0)
+        self.assertEqual(caba["target_vat"], 7000.0)
+        self.assertEqual(
+            sorted(caba_tis.mapped("tax_invoice_number")),
+            ["V-CABA-2569-40", "V-CABA-2569-60"],
+        )
 
     def test_05_pnd_report_by_form(self):
         """Matrix 4: PND normalized totals by form and period."""

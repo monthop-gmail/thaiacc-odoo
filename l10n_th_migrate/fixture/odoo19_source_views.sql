@@ -48,10 +48,13 @@ JOIN legacy19.account_move m ON m.id = l.move_id
 LEFT JOIN public.account_account a ON a.id = l.account_id;
 
 CREATE OR REPLACE VIEW legacy19.account_tax_invoice_evidence AS
-SELECT ti.id, COALESCE(m.ref, m.name) AS bill_reference,
-       ti.tax_invoice_number, ti.tax_invoice_date
+SELECT ti.id, COALESCE(origin.ref, m.ref, m.name) AS bill_reference,
+       ti.tax_invoice_number, ti.tax_invoice_date,
+       (m.tax_cash_basis_origin_move_id IS NOT NULL) AS is_cash_basis,
+       ABS(ti.balance) AS vat_amount
 FROM public.account_move_tax_invoice ti
 JOIN public.account_move m ON m.id = ti.move_id
+LEFT JOIN public.account_move origin ON origin.id = m.tax_cash_basis_origin_move_id
 JOIN legacy19.scope s ON s.company_id = ti.company_id
 WHERE ti.tax_invoice_number IS NOT NULL AND ti.tax_invoice_date IS NOT NULL;
 

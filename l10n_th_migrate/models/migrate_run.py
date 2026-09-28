@@ -22,7 +22,7 @@ LEGACY_QUERIES = {
     "partners": "SELECT id, name, vat, is_company, company_registry FROM legacy19.res_partner ORDER BY id",
     "company_novat": "SELECT company_id, novat FROM legacy19.res_company_novat ORDER BY company_id",
     "withholding_moves": "SELECT id, partner_id, date, state, base_amount, wht_amount, withholding_tax_id, bill_reference FROM legacy19.account_withholding_move ORDER BY id",
-    "tax_invoice_evidence": "SELECT id, bill_reference, tax_invoice_number, tax_invoice_date FROM legacy19.account_tax_invoice_evidence ORDER BY id",
+    "tax_invoice_evidence": "SELECT id, bill_reference, tax_invoice_number, tax_invoice_date, is_cash_basis, vat_amount FROM legacy19.account_tax_invoice_evidence ORDER BY id",
     "pit_tables": "SELECT id, calendar_year FROM legacy19.personal_income_tax ORDER BY id",
     "account_moves": "SELECT id, ref, move_type, state, partner_id, date, amount_total FROM legacy19.account_move ORDER BY id",
     "account_move_lines": "SELECT id, move_id, account_code, debit, credit FROM legacy19.account_move_line ORDER BY id",
@@ -187,7 +187,7 @@ class L10nThMigrateRun(models.Model):
         }
         rows = [
             row for row in self._fetch_legacy(conn, "tax_invoice_evidence")
-            if row["bill_reference"] in vendor_refs
+            if row["bill_reference"] in vendor_refs and not row["is_cash_basis"]
         ]
         Move = self.env["account.move"]
         mapped = 0
@@ -197,6 +197,7 @@ class L10nThMigrateRun(models.Model):
                 [
                     ("ref", "=", row["bill_reference"]),
                     ("move_type", "in", ("in_invoice", "in_receipt")),
+                    ("state", "=", "posted"),
                     ("company_id", "=", self.env.company.id),
                 ],
             )
@@ -218,9 +219,67 @@ class L10nThMigrateRun(models.Model):
             "unresolved": unresolved,
         }
 
+    def _reconcile_caba_tax_invoices(self, conn, report):
+        """Keep payment-time tax invoices distinct from bill-level evidence."""
+        vendor_refs = {
+            move["ref"] for move in self._fetch_legacy(conn, "account_moves")
+            if move["move_type"] in ("in_invoice", "in_receipt")
+            and move["state"] == "posted"
+        }
+        rows = [
+            row for row in self._fetch_legacy(conn, "tax_invoice_evidence")
+            if row["is_cash_basis"] and row["bill_reference"] in vendor_refs
+        ]
+        by_ref = {}
+        for row in rows:
+            by_ref.setdefault(row["bill_reference"], []).append(row)
+
+        mapped = 0
+        unresolved = []
+        target_vat = 0.0
+        for ref, source_invoices in by_ref.items():
+            bills = self.env["account.move"].search([
+                ("ref", "=", ref),
+                ("move_type", "in", ("in_invoice", "in_receipt")),
+                ("state", "=", "posted"),
+                ("company_id", "=", self.env.company.id),
+            ])
+            if len(bills) != 1:
+                unresolved.extend(row["id"] for row in source_invoices)
+                continue
+            target_invoices = bills.l10n_th_tax_invoice_ids.filtered(
+                lambda ti: ti.payment_move_id and ti.state == "posted"
+            )
+            target_bill_vat = sum(abs(ti.vat_amount) for ti in target_invoices)
+            target_vat += target_bill_vat
+            unused = target_invoices
+            for row in source_invoices:
+                source_amount = abs(float(row["vat_amount"] or 0.0))
+                candidates = unused.filtered(
+                    lambda ti: abs(abs(ti.vat_amount) - source_amount) < 0.01
+                )
+                if len(candidates) != 1:
+                    unresolved.append(row["id"])
+                    continue
+                candidates.write({
+                    "tax_invoice_number": row["tax_invoice_number"],
+                    "date": row["tax_invoice_date"],
+                })
+                unused -= candidates
+                mapped += 1
+
+        source_vat = sum(abs(float(row["vat_amount"] or 0.0)) for row in rows)
+        report["caba_tax_invoices"] = {
+            "legacy_rows": len(rows),
+            "mapped": mapped,
+            "unresolved": unresolved,
+            "source_vat": round(source_vat, 2),
+            "target_vat": round(target_vat, 2),
+            "vat_delta": round(target_vat - source_vat, 2),
+        }
+
     def _archive_legacy_only(self, conn, report):
-        """Contract rows whose engines are not revived: legacy withholding
-        moves and the novat flags are archived verbatim."""
+        """Archive legacy WHT, novat, and CABA tax-invoice evidence."""
         Archive = self.env["l10n_th.migrate.archive"]
         count = 0
         for row in self._fetch_legacy(conn, "withholding_moves"):
@@ -243,6 +302,15 @@ class L10nThMigrateRun(models.Model):
                 },
             )
             count += 1
+        for row in self._fetch_legacy(conn, "tax_invoice_evidence"):
+            if row["is_cash_basis"]:
+                Archive.create({
+                    "run_id": self.id,
+                    "source_table": "legacy19.account_tax_invoice_evidence",
+                    "legacy_id": row["id"],
+                    "payload": json.loads(json.dumps(row, default=str)),
+                })
+                count += 1
         report["archived_rows"] = count
 
     def _trial_balance(self, conn, report):
@@ -442,6 +510,8 @@ class L10nThMigrateRun(models.Model):
             "unresolved_partner_ids": report["pnd_entity_types"]["unresolved"],
             "unresolved_bank_ids": report["banks"]["unresolved"],
             "unresolved_vendor_tax_invoice_ids": report["tax_invoice_evidence"]["unresolved"],
+            "unresolved_caba_tax_invoice_ids": report["caba_tax_invoices"]["unresolved"],
+            "caba_vat_delta": report["caba_tax_invoices"]["vat_delta"],
             "duplicate_tax_names": report["duplicate_taxes"],
             "requires_manual_review": bool(
                 balance["target_missing_refs"]
@@ -451,6 +521,8 @@ class L10nThMigrateRun(models.Model):
                 or report["pnd_entity_types"]["unresolved"]
                 or report["banks"]["unresolved"]
                 or report["tax_invoice_evidence"]["unresolved"]
+                or report["caba_tax_invoices"]["unresolved"]
+                or report["caba_tax_invoices"]["vat_delta"]
                 or report["duplicate_taxes"]
             ),
         }
@@ -468,6 +540,7 @@ class L10nThMigrateRun(models.Model):
                     run._map_branch_identifiers(conn, report)
                     run._map_banks(conn, report)
                     run._map_tax_invoice_evidence(conn, report)
+                    run._reconcile_caba_tax_invoices(conn, report)
                     run._archive_legacy_only(conn, report)
                     run._archive_certificates(conn, report)
                     run._trial_balance(conn, report)
