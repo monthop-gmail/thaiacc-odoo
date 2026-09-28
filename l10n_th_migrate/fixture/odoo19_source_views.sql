@@ -5,9 +5,12 @@ CREATE SCHEMA IF NOT EXISTS legacy19;
 CREATE TABLE IF NOT EXISTS legacy19.scope (company_id integer PRIMARY KEY);
 
 CREATE OR REPLACE VIEW legacy19.account_withholding_tax AS
-SELECT t.id, t.name, t.amount, t.income_tax_form, t.is_pit
+SELECT t.id, t.name, t.amount, t.income_tax_form, t.is_pit,
+       a.code_store ->> t.company_id::text AS account_code,
+       a.name ->> 'en_US' AS account_name, a.account_type
 FROM public.account_withholding_tax t
-JOIN legacy19.scope s ON s.company_id = t.company_id;
+JOIN legacy19.scope s ON s.company_id = t.company_id
+LEFT JOIN public.account_account a ON a.id = t.account_id;
 
 CREATE OR REPLACE VIEW legacy19.account_withholding_move AS
 SELECT w.id, w.partner_id, w.date,
@@ -34,7 +37,7 @@ FROM public.res_company c JOIN legacy19.scope s ON s.company_id = c.id;
 
 CREATE OR REPLACE VIEW legacy19.account_move AS
 SELECT m.id, COALESCE(m.ref, m.name) AS ref, m.move_type, m.state,
-       m.partner_id, m.date, m.amount_total
+       m.partner_id, m.date, m.amount_total, m.invoice_date
 FROM public.account_move m
 JOIN legacy19.scope s ON s.company_id = m.company_id
 WHERE m.move_type IN ('in_invoice', 'in_receipt', 'out_invoice', 'out_refund');
@@ -46,6 +49,61 @@ SELECT l.id, l.move_id,
 FROM public.account_move_line l
 JOIN legacy19.account_move m ON m.id = l.move_id
 LEFT JOIN public.account_account a ON a.id = l.account_id;
+
+-- Native document lines and settlements for a repeatable accounting rehearsal.
+-- A caller must reject unsupported taxes or journal shapes before posting.
+CREATE OR REPLACE VIEW legacy19.account_invoice_line AS
+SELECT l.id, l.move_id, l.name, l.quantity, l.price_unit, l.discount,
+       a.code_store ->> l.company_id::text AS account_code,
+       wt.name AS withholding_tax_name,
+       COALESCE((
+           SELECT jsonb_agg(jsonb_build_object(
+               'name', t.name ->> 'en_US', 'amount', t.amount,
+               'type_tax_use', t.type_tax_use,
+               'tax_exigibility', t.tax_exigibility,
+               'transition_account_code',
+               transition.code_store ->> t.company_id::text) ORDER BY t.id)
+           FROM public.account_move_line_account_tax_rel rel
+           JOIN public.account_tax t ON t.id = rel.account_tax_id
+           LEFT JOIN public.account_account transition
+               ON transition.id = t.cash_basis_transition_account_id
+           WHERE rel.account_move_line_id = l.id
+       ), '[]'::jsonb) AS taxes
+FROM public.account_move_line l
+JOIN legacy19.account_move m ON m.id = l.move_id
+LEFT JOIN public.account_account a ON a.id = l.account_id
+LEFT JOIN public.account_withholding_tax wt ON wt.id = l.wht_tax_id
+WHERE l.display_type = 'product';
+
+CREATE OR REPLACE VIEW legacy19.account_payment_evidence AS
+SELECT DISTINCT p.id, p.amount, p.date, p.state, invoice.id AS invoice_move_id
+FROM public.account_payment p
+JOIN public.account_partial_reconcile apr ON TRUE
+JOIN public.account_move_line debit ON debit.id = apr.debit_move_id
+JOIN public.account_move_line credit ON credit.id = apr.credit_move_id
+JOIN legacy19.account_move invoice ON invoice.id = CASE
+    WHEN debit.move_id = p.move_id THEN credit.move_id
+    WHEN credit.move_id = p.move_id THEN debit.move_id
+END
+JOIN legacy19.scope s ON s.company_id = p.company_id
+WHERE p.move_id IN (debit.move_id, credit.move_id)
+  AND invoice.state = 'posted';
+
+CREATE OR REPLACE VIEW legacy19.source_identity AS
+SELECT value AS database_uuid, (SELECT company_id FROM legacy19.scope) AS company_id
+FROM public.ir_config_parameter WHERE key = 'database.uuid';
+
+CREATE OR REPLACE VIEW legacy19.account_ledger_period AS
+SELECT to_char(m.date, 'YYYY-MM') AS period,
+       a.code_store ->> l.company_id::text AS account_code,
+       SUM(l.debit) AS debit, SUM(l.credit) AS credit,
+       COUNT(DISTINCT m.id) AS move_count
+FROM public.account_move_line l
+JOIN public.account_move m ON m.id = l.move_id
+JOIN public.account_account a ON a.id = l.account_id
+JOIN legacy19.scope s ON s.company_id = l.company_id
+WHERE m.state = 'posted'
+GROUP BY to_char(m.date, 'YYYY-MM'), a.code_store ->> l.company_id::text;
 
 CREATE OR REPLACE VIEW legacy19.account_tax_invoice_evidence AS
 SELECT ti.id, COALESCE(origin.ref, m.ref, m.name) AS bill_reference,

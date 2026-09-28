@@ -1,0 +1,138 @@
+{
+  "documents": {
+    "created": 0,
+    "linked": 5,
+    "source": 5
+  },
+  "gates": {
+    "bank_qr_render": "BLOCKED",
+    "caba_vat": "DELTA",
+    "canonical_identity": "PASS",
+    "full_ledger_by_period": "DELTA",
+    "historical_50_tawi_access": "BLOCKED",
+    "historical_source_snapshot": "BLOCKED",
+    "on_invoice_vat": "PASS",
+    "pit_pnd_periods": "BLOCKED",
+    "post_migration_upgrade": "PASS",
+    "posted_documents": "PASS",
+    "reversal_pair": "BLOCKED",
+    "withholding": "PASS"
+  },
+  "ledger_period_deltas": [
+    {
+      "account_code": "114200",
+      "credit_delta": 0.0,
+      "debit_delta": -2800.0,
+      "net_balance_delta": -2800.0,
+      "period": "2026-09"
+    },
+    {
+      "account_code": "114299",
+      "credit_delta": -2800.0,
+      "debit_delta": 0.0,
+      "net_balance_delta": 2800.0,
+      "period": "2026-09"
+    },
+    {
+      "account_code": "611100",
+      "credit_delta": 200000.0,
+      "debit_delta": 200000.0,
+      "net_balance_delta": 0.0,
+      "period": "2026-09"
+    }
+  ],
+  "payments": {
+    "created": 0,
+    "linked": 3,
+    "source": 3
+  },
+  "runner_id": 8,
+  "runner_stats": {
+    "archived_rows": 4,
+    "banks": {
+      "legacy_rows": 1,
+      "mapped": 1,
+      "unresolved": []
+    },
+    "branch_identifiers": {
+      "legacy_rows": 0,
+      "mapped": 0
+    },
+    "caba_tax_invoices": {
+      "legacy_rows": 2,
+      "mapped": 1,
+      "source_vat": 9800.0,
+      "target_vat": 7000.0,
+      "unresolved": [
+        5
+      ],
+      "vat_delta": -2800.0
+    },
+    "certificates_archived": 1,
+    "customer_tax_invoices": {
+      "legacy_rows": 1,
+      "with_official_ti": 1
+    },
+    "duplicate_taxes": [],
+    "pit_tables": {
+      "legacy_rows": 1,
+      "mapped": 1
+    },
+    "pnd_entity_types": {
+      "legacy_rows": 2,
+      "mapped": 2,
+      "unresolved": []
+    },
+    "reconciliation": {
+      "legacy_wht_total": 3000.0,
+      "matched": true,
+      "official_wht_total": 3000.0
+    },
+    "reconciliation_summary": {
+      "caba_vat_delta": -2800.0,
+      "document_credit_delta": 0.0,
+      "document_debit_delta": 0.0,
+      "duplicate_tax_names": [],
+      "missing_document_refs": [],
+      "requires_manual_review": true,
+      "source_balanced": true,
+      "source_document_count": 4,
+      "target_balanced": true,
+      "target_document_count": 4,
+      "unresolved_bank_ids": [],
+      "unresolved_caba_tax_invoice_ids": [
+        5
+      ],
+      "unresolved_partner_ids": [],
+      "unresolved_vendor_tax_invoice_ids": [],
+      "wht_delta": 0.0
+    },
+    "tax_invoice_evidence": {
+      "legacy_rows": 1,
+      "mapped": 1,
+      "unresolved": []
+    },
+    "trial_balance": {
+      "credit_delta": 0.0,
+      "debit_credit_equal": true,
+      "debit_delta": 0.0,
+      "legacy_credit": 421000.0,
+      "legacy_debit": 421000.0,
+      "moves": 4,
+      "target_credit": 421000.0,
+      "target_debit": 421000.0,
+      "target_debit_credit_equal": true,
+      "target_missing_refs": [],
+      "target_moves": 4,
+      "unbalanced_moves": []
+    },
+    "withholding_taxes": {
+      "legacy_rows": 1,
+      "mapped": 1
+    }
+  },
+  "source_company_id": 2,
+  "source_database_uuid": "209f3ff5-bab2-11f1-a1f9-45d27200566f",
+  "status": "BLOCKED",
+  "target_company_id": 2
+}

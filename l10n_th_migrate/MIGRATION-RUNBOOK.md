@@ -1,10 +1,12 @@
 # ThaiACC 19.0 → 20.0 Migration Runbook
 
-This runbook covers the deterministic legacy evidence fixture and the
-`l10n_th_migrate` runner. The runner connects to the source with a read-only
-PostgreSQL session. It maps master data and evidence; it does **not** carry
-posted journal entries into Odoo 20. An accounting migration must post or
-import those entries separately, then the runner can reconcile them.
+This runbook covers the deterministic legacy evidence fixture, the
+`l10n_th_migrate` runner, and a native Odoo 19 accounting rehearsal. The
+runner connects to the source with a read-only PostgreSQL session. It maps
+master data and evidence; it does **not** carry posted journal entries into
+Odoo 20. The separate `scripts/rehearse_odoo19.py` imports the supported
+invoice/payment cohort through the official Odoo 20 ORM, then invokes the
+runner to reconcile it. It rejects unsupported document and tax shapes.
 
 ## Fixture test
 
@@ -41,7 +43,9 @@ running Odoo directly. The fixture SQL is
    `novat`, and 50 Tawi certificates are archived as read-only evidence.
 4. Migrate posted accounting through the accounting migration process.
    Preserve historical postings and references. The test constructs mirror
-   documents only to exercise the reconciliation contract.
+   documents only to exercise the reconciliation contract. The native clone
+   rehearsal script below persists supported documents and payments and
+   assigns source-scoped external IDs for repeat runs.
 5. Run again to attach vendor tax-invoice evidence and produce
    `stats.reconciliation_summary`. Review every missing reference, debit and
    credit delta, WHT delta, unresolved partner, and duplicate tax name.
@@ -146,3 +150,52 @@ the focused CABA test and the full `l10n_th_migrate` suite passed (11/11).
 A genuine reversal pair, PIT payment history, PND period totals, and historic
 transaction identities are not represented by this new clone cohort; those
 acceptance items remain open.
+
+## Native Odoo 19 accounting rehearsal (2026-09-28)
+
+Apply `fixture/odoo19_source_views.sql` to an **isolated clone** of Odoo 19,
+insert one source company into `legacy19.scope`, then grant the source DSN
+read-only access. Create a fresh Odoo 20 database with `thaiacc` and
+`l10n_th_migrate` installed. Run `scripts/rehearse_odoo19.py` as stdin to
+`odoo shell` with `THAIACC_SOURCE_DSN` and `THAIACC_TARGET_COMPANY` set. The
+script creates the Thai target company and chart, imports native invoice lines
+and reconciled payments, maps the source WHT posting account to the official
+tax repartition, and runs the evidence mapper on both sides of the import.
+Afterwards run `-u thaiacc,l10n_th_migrate` on that target database and run
+the script again with `THAIACC_POST_UPGRADE=1`. A run emits one
+`THAIACC_REHEARSAL_REPORT=` JSON line. Persist it for audit; the report from
+our final after-upgrade run is `fixture/odoo19_rehearsal_report.json`. The
+script is a strict rehearsal for its supported invoice/payment shapes, not a
+general ledger migration for arbitrary historical source rows.
+
+The isolated source was the current `monthop-gmail/thaiacc-odoo` 19.0 commit
+`abd970f` with the ThaiACC 19/OCA stack. Repeating the CABA case against an
+upgraded copy with current OCA `l10n-thailand` 19.0 commit `cc24480` still
+gave 2,800 VAT on the first 40% payment and 7,000 on the second 60% payment.
+The source posting, not only the older OCA checkout, therefore needs an
+accounting decision.
+
+The final fresh-target run used database `thaiacc13_rehearsal_v3`. It imported
+four posted documents, one cancelled document, and three payments. Source and
+target posted document debit/credit were 421,000 each. Source and target WHT
+were 3,000 each. Vendor and customer on-invoice tax invoices mapped, as did
+one bank/proxy and one historical 50 Tawi certificate into the archive. A
+second import created **zero** documents and **zero** payments; all eight
+source identities remained linked. The post-import `thaiacc,l10n_th_migrate`
+upgrade and a following registry/reconciliation run succeeded.
+
+| Gate | Result | Evidence / action |
+|---|---|---|
+| Posted invoice debit/credit | PASS | 421,000 each; four posted refs, no missing refs |
+| WHT | PASS | 3,000 both sides; source account `MIGWHT19` preserved in target tax repartition |
+| On-invoice VAT | PASS | Vendor 7,000 and customer 7,000 with official target invoices |
+| Canonical import identity and post-upgrade run | PASS | 5 moves + 3 payments linked; repeat created 0; upgrade succeeded |
+| CABA and monthly ledger | DELTA | Source VAT 9,800 vs target 7,000. September account `114200` net target-minus-source = -2,800 and `114299` = +2,800; source CABA tax invoice ID 5 unresolved |
+| Gross expense turnover | DELTA, net zero | Target official CABA entries add 200,000 debit and 200,000 credit to `611100` compared with source; net balance is zero |
+| PIT/PND, reversal, live QR, historical 50 Tawi access | BLOCKED | The seeded clone lacks the relevant historical transactions or approved replacement policy |
+| Production historical migration | BLOCKED | No historical Odoo 19 database/snapshot was available; this is a newly seeded clone |
+
+`PASS` applies only to this seeded cohort. The overall machine report is
+`BLOCKED` because the historical source and several acceptance rows are not
+available. Do not promote this database as a production migration or close
+task #13 on this evidence.
