@@ -390,6 +390,8 @@ class L10nThMigrateRun(models.Model):
                 [
                     ("ref", "=", row["bill_reference"]),
                     ("move_type", "=", "out_invoice"),
+                    ("state", "=", "posted"),
+                    ("company_id", "=", self.env.company.id),
                 ],
                 limit=1,
             )

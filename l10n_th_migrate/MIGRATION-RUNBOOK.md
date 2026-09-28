@@ -118,5 +118,15 @@ were 207,000 each, WHT stayed 3,000 each, and all reported deltas were zero.
 The bill journal lines also matched by account code on both sides:
 `611100` debit 200,000, `114200` input VAT debit 7,000, and `212100`
 payables credit 207,000.
-The clone still has no sales VAT, cancellations, partial payments, or historic
-transaction identities, so those acceptance items remain open.
+The clone was extended with a posted customer invoice (output VAT 7,000) and
+a cancelled customer invoice. The Odoo 20 posted invoice has an official
+sales tax invoice, while the cancelled invoice's tax invoice has state
+`cancel`. The cancelled source and target invoices are excluded from posted
+controls. The runner's customer tax-invoice lookup now restricts by posted
+state and company, which matters when a cancelled target invoice shares a
+reference with the posted replacement. The final source and target document
+debit and credit totals were 314,000 each, with no reported deltas.
+
+Partial CABA payments, a genuine reversal pair, PIT payment history, PND
+period totals, and historic transaction identities are not represented by
+this new clone cohort; those acceptance items remain open.
