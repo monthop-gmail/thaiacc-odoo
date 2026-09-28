@@ -99,3 +99,13 @@ verified relationship. The clone contains no VAT tax-invoice evidence, and it
 is a newly seeded cohort rather than historical business data. The remaining
 acceptance gates above still require a real source snapshot and a posted
 accounting import on the Odoo 20 target.
+
+The Odoo 20 runner was executed twice against this clone. Before the target
+bill was posted, it reported the missing bill reference, debit and credit
+deltas of -100,000 each, and WHT delta of -3,000. After a matching bill and
+payment were posted through the Odoo 20 ORM, the second run reported one
+source and one target document, debit and credit of 100,000 on each side,
+WHT 3,000 on each side, no missing reference, no duplicate mapped tax, and
+`requires_manual_review=False` for the rows in this seeded cohort. This
+zero-delta result does not cover VAT, cancellations, partial payments, or
+historic transaction identity because the new clone has none of those rows.
