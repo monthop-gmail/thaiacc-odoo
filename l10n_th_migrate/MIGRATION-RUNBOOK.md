@@ -29,8 +29,13 @@ running Odoo directly. The fixture SQL is
 2. Point `source_dsn` at a legacy database. Grant the credential read-only
    access. The runner calls `set_session(readonly=True)` as a second guard.
    Current SQL expects a normalized `legacy19` schema shaped like the fixture.
-   A stock Odoo 19 database uses its own schema and cannot be passed directly;
-   build and validate read-only source views before a real database run.
+   A stock Odoo 19 database uses its own schema and cannot be passed directly.
+   On an isolated Odoo 19 clone, apply
+   `l10n_th_migrate/fixture/odoo19_source_views.sql`, insert the source
+   company ID into `legacy19.scope`, and validate that it contains exactly one
+   company before a run. These views translate the installed ThaiACC 19/OCA
+   schema to the runner contract. Apply them only to a clone; the runner itself
+   opens the source read-only.
 3. Run once to map WHT taxes, PIT brackets, branch identifiers, PND person or
    company classification, and bank/PromptPay proxies. Legacy WHT moves,
    `novat`, and 50 Tawi certificates are archived as read-only evidence.
@@ -76,3 +81,21 @@ The fixture is synthetic. Its green test result proves the stated mapping
 paths and control checks, not a full production migration. No source ledger
 is rewritten. `novat` and historical certificates remain read-only evidence
 until their target policy is decided.
+
+## Odoo 19 clone check (2026-09-28)
+
+No usable old Odoo 19 database or Docker volume was found under
+`../odoo-thaiacc` or `../odoo-thaiacc-test`. An isolated Odoo 19 database was
+created from the 19.0 ThaiACC code and installed with the Thai chart and
+ThaiACC modules. A company-specific vendor bill was posted through the Odoo
+ORM, paid with 3% withholding tax, and issued a 50 Tawi certificate. The
+source views returned one WHT tax, one WHT move (base 100,000; WHT 3,000), one
+vendor bill, two bill journal lines, one partner, one bank proxy, one issued
+certificate, one PIT table, and eight PIT rates. All 11 view queries executed.
+
+The Odoo 19 certificate relationship uses the certificate's payment journal
+and partner, not `account_withholding_move.cert_id`; the adapter reflects that
+verified relationship. The clone contains no VAT tax-invoice evidence, and it
+is a newly seeded cohort rather than historical business data. The remaining
+acceptance gates above still require a real source snapshot and a posted
+accounting import on the Odoo 20 target.
