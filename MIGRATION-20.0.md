@@ -22,8 +22,12 @@ All six slices of the ThaiACC Odoo 20 implementation sequence
 | E20-005 | `l10n_th_pit` — progressive PIT on the official WHT engine (per-year bracket tables, marginal computation, yearly base read from official payment withholding lines) | `b3d3e99` |
 | E20-006 | `l10n_th_pnd_report` — normalized PND1/1A/2/3/53 adapter over official payment withholding data | `b3d3e99` |
 
-Test evidence: 24 module tests + official `l10n_th` regression 15/15, all
-green on a fresh database (runs reproduced via `test/run_install_test.sh`).
+Test evidence: 37 `def test_*` methods across the suite (purchase_tax_invoice
+5 + superseded official replacement, wht_defaults 4, pit 4, pnd_report 4,
+ocaacc 5, thaiacc 4, migrate 11) + official `l10n_th` regression 15/15, all
+green on a fresh database (runs reproduced via `test/run_install_test.sh`;
+note the Odoo runner's stats line attributes cases differently than source
+`def test_*` counts — see discussion seq 22).
 
 ## 2. Canonical architecture (official-first)
 
