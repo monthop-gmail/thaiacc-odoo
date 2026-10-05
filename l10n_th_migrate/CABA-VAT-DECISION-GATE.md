@@ -110,3 +110,57 @@ upstream to the legacy-stack owners.
   (this gate). `611100` ±200,000 gross with net 0 = a mirrored posting pair
   present on one side only — trace with the same pattern (Q1-style per-move
   listing) before the next rehearsal.
+
+## 7. 2026-10-05 trace — decisive queries executed (reproduced cohort)
+
+The cohort was rebuilt reproducibly from `scripts/seed_odoo19_rehearsal.py`
+(fresh Odoo 19 clone at `abd970f` + OCA 19.0 fork checkout, payments pinned
+to 2026-09-10/15/20) and re-migrated into a fresh Odoo 20 target. The
+machine report (fixture/odoo19_rehearsal_report.json) again froze
+source 9,800 vs target 7,000, unresolved source TI id 4 (2026-09-28 run:
+id 5). Q1–Q3 were then executed read-only on both sides.
+
+**Q1 — the journal entries behind the two legacy CABA TIs:**
+
+| Entry | Lines | TI |
+| --- | --- | --- |
+| CABA/2026/09/0002 (payment 1, 40%) | Dr 114200 2,800 / Cr 114299 2,800 | CABA-MIG-19-40 (2,800) |
+| CABA/2026/09/0001 (payment 2, 60%) | Dr 114200 **7,000** / Cr 114299 **7,000** | CABA-MIG-19-60 (**7,000**) |
+
+Both entries carry `tax_cash_basis_origin_move_id` → the bill (NOT an
+isolated pair with no origin), and neither carries an expense/base line
+(the legacy override deletes income/expense lines from CABA entries).
+
+**Q2 — the bill's tax + partial reconciles:** `VAT7-ONPAYMENT`,
+`tax_exigibility='on_payment'`, transition account 114299; two payment
+partial reconciles (42,800 + 64,200) plus one clear-tax reconcile. The
+bill's transition tax line is Dr 114299 7,000. The bill itself carries no
+TI row (legacy creates TIs only for `on_invoice` tax lines or CABA-origin
+entries).
+
+**Q3 — the target's official CABA TIs for the same bill:** exactly two —
+2,800 (numbered CABA-MIG-19-40, matched) and **4,200** (unnumbered,
+unmatched — correctly so). Official CABA entries mirror the proportional
+base per partial (611100 ±40,000 and ±60,000).
+
+**611100 ±200,000 explained (two official mirror shapes, both net zero):**
+official WHT payments mirror the base through the expense account on the
+payment entry (±100,000); official CABA entries mirror the proportional
+base per partial (±100,000 combined). The legacy stack books neither.
+
+**Classification (§3 taxonomy): ENGINE BEHAVIOR — confirmed.** The legacy
+`account_partial_reconcile` override resets each CABA entry to draft and
+removes its reconciles ("waiting clear tax"). When the second payment's
+partial reconcile runs while the first CABA entry is still draft, the
+incremental "VAT already claimed" state is destroyed and the second entry
+books the **full remaining VAT (7,000) instead of its 4,200 slice** —
+over-claiming 2,800. Verified by settlement order on the same stack:
+clearing each installment before the next payment yields 2,800 + 4,200 =
+7,000 (no delta); paying both installments before any clear yields the
+frozen 2,800 + 7,000 = 9,800.
+
+Per §5's own rule, a source-side engine over-claim makes **Option A
+mandatory**: official 20 TIs are canonical, the legacy 7,000 row stays
+archived evidence with a cross-reference, and the draft-reset behavior is
+reported to the legacy-stack owners (Ecosoft l10n_th_account_tax /
+OCA l10n-thailand 19.0). The final choice remains the owner's.

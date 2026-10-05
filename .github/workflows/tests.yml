@@ -1,0 +1,50 @@
+name: tests
+
+on:
+  push:
+    branches: [20.0]
+  pull_request:
+    branches: [20.0]
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U odoo"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DB: ci20
+      DB_ARGS: --db_host=127.0.0.1 --db_user=odoo --db_password=odoo
+    steps:
+      - uses: actions/checkout@v4
+      # Odoo 20 validates -i names against ir_module_module, which on a
+      # virgin database only knows "base" — boot in two steps like
+      # test/run_install_test.sh. Demo is required: the migration fixture
+      # targets ThaiACC demo partners.
+      - name: Init base
+        run: |
+          docker run --rm --network host -v "$PWD":/mnt/extra-addons:ro \
+            --entrypoint /usr/bin/odoo odoo:20 \
+            -d "$DB" $DB_ARGS --stop-after-init --max-cron-threads=0 \
+            -i base --with-demo
+      - name: Install ThaiACC suite and run tests
+        run: |
+          docker run --rm --network host -v "$PWD":/mnt/extra-addons:ro \
+            --entrypoint /usr/bin/odoo odoo:20 \
+            -d "$DB" $DB_ARGS --max-cron-threads=0 \
+            -i l10n_th_base_sequence,l10n_th_promptpay,l10n_th_purchase_tax_invoice,l10n_th_wht_defaults,l10n_th_pit,l10n_th_pnd_report,ocaacc,thaiacc,l10n_th_migrate \
+            --with-demo --test-enable \
+            --test-tags /l10n_th_base_sequence,/l10n_th_promptpay,/l10n_th_purchase_tax_invoice,/l10n_th_wht_defaults,/l10n_th_pit,/l10n_th_pnd_report,/ocaacc,/thaiacc,/l10n_th_migrate \
+            --stop-after-init

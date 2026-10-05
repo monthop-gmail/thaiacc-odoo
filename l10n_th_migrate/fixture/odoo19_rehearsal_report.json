@@ -46,7 +46,7 @@
     "linked": 3,
     "source": 3
   },
-  "runner_id": 8,
+  "runner_id": 4,
   "runner_stats": {
     "archived_rows": 4,
     "banks": {
@@ -64,7 +64,7 @@
       "source_vat": 9800.0,
       "target_vat": 7000.0,
       "unresolved": [
-        5
+        4
       ],
       "vat_delta": -2800.0
     },
@@ -101,7 +101,7 @@
       "target_document_count": 4,
       "unresolved_bank_ids": [],
       "unresolved_caba_tax_invoice_ids": [
-        5
+        4
       ],
       "unresolved_partner_ids": [],
       "unresolved_vendor_tax_invoice_ids": [],
@@ -132,7 +132,7 @@
     }
   },
   "source_company_id": 2,
-  "source_database_uuid": "209f3ff5-bab2-11f1-a1f9-45d27200566f",
+  "source_database_uuid": "20d0a186-c09f-11f1-8b8b-331dd5b784ca",
   "status": "BLOCKED",
   "target_company_id": 2
 }

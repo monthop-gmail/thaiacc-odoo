@@ -10,7 +10,9 @@ separate importer for every remaining journal shape.
 1. Record the source database UUID, company ID, Odoo 19 commit, OCA commit,
    installed module list, chart, fiscal periods, and record counts.
 2. Restore the source backup into an isolated Odoo 19 clone. Never apply
-   adapter views to the live database.
+   adapter views to the live database. Without a historical snapshot,
+   `scripts/seed_odoo19_rehearsal.py` (run as stdin to `odoo shell` on the
+   clone) seeds the deterministic rehearsal cohort instead.
 3. Apply `fixture/odoo19_source_views.sql` to the clone and insert **exactly
    one** company ID into `legacy19.scope`. Grant the importer SELECT-only
    access. The Python connection also starts in read-only mode.

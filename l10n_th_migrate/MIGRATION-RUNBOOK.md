@@ -191,7 +191,7 @@ upgrade and a following registry/reconciliation run succeeded.
 | On-invoice VAT | PASS | Vendor 7,000 and customer 7,000 with official target invoices |
 | Canonical import identity and post-upgrade run | PASS | 5 moves + 3 payments linked; repeat created 0; upgrade succeeded |
 | CABA and monthly ledger | DELTA | Source VAT 9,800 vs target 7,000. September account `114200` net target-minus-source = -2,800 and `114299` = +2,800; source CABA tax invoice ID 5 unresolved |
-| Gross expense turnover | DELTA, net zero | Target official CABA entries add 200,000 debit and 200,000 credit to `611100` compared with source; net balance is zero |
+| Gross expense turnover | DELTA, net zero | Two official-only mirror shapes, both net zero: official WHT payments mirror the base through the expense account on the payment entry (±100,000) and official CABA entries mirror the proportional base per partial (±100,000 combined); the legacy stack books neither. Classified in `CABA-VAT-DECISION-GATE.md` §7 |
 | PIT/PND, reversal, live QR, historical 50 Tawi access | BLOCKED | The seeded clone lacks the relevant historical transactions or approved replacement policy |
 | Production historical migration | BLOCKED | No historical Odoo 19 database/snapshot was available; this is a newly seeded clone |
 
@@ -199,3 +199,32 @@ upgrade and a following registry/reconciliation run succeeded.
 `BLOCKED` because the historical source and several acceptance rows are not
 available. Do not promote this database as a production migration or close
 task #13 on this evidence.
+
+## Reproducible seed cohort and CABA classification (2026-10-05)
+
+`scripts/seed_odoo19_rehearsal.py` rebuilds the native Odoo 19 cohort on a
+fresh clone deterministically (payments pinned to 2026-09-10/15/20): the
+WHT bill with 50 Tawi certificate, the on-invoice VAT bill with tax
+invoice `VAT-MIG-19-001`, a posted and a cancelled customer invoice, and
+the on-payment (CABA) bill paid 42,800 then 64,200. Apply
+`fixture/odoo19_source_views.sql`, set `legacy19.scope` to the seeded
+company, grant a read-only role the `legacy19` schema, and run
+`scripts/rehearse_odoo19.py` on a fresh Odoo 20 target followed by
+`-u thaiacc,l10n_th_migrate` and a post-upgrade rerun with
+`THAIACC_POST_UPGRADE=1`. The archived report from that sequence is
+`fixture/odoo19_rehearsal_report.json`.
+
+The rerun reproduced every frozen control total (documents 421,000, WHT
+3,000, on-invoice VAT mapped, CABA source 9,800 vs target 7,000) and the
+post-upgrade import created 0 documents and 0 payments.
+
+**Settlement order decides the CABA over-claim.** Clearing each
+installment's deferred tax before paying the next yields 2,800 + 4,200 =
+7,000 (equal to official 20). Paying both installments before any
+clear-tax step yields the frozen 2,800 + 7,000 = 9,800: the legacy
+draft-reset between partials destroys the incremental claimed-VAT state,
+so the second entry books the full remaining VAT. Q1–Q3 traces on both
+sides and the ENGINE BEHAVIOR classification are in
+`CABA-VAT-DECISION-GATE.md` §7; PND1A options are in
+`PND1A-CLASSIFICATION.md` and the 50 Tawi archive access options in
+`50-TAWI-ARCHIVE-ACCESS.md`. Both await the owner decision.
