@@ -313,6 +313,83 @@ class L10nThMigrateRun(models.Model):
                 count += 1
         report["archived_rows"] = count
 
+    def _caba_policy(self):
+        """Approved policy for legacy CABA over-claims (dec-24252acf): the
+        official Odoo 20 CABA result is canonical; legacy rows are archived
+        evidence with a cross-reference, never rebooked on the target."""
+        return self.env["ir.config_parameter"].sudo().get_str(
+            "l10n_th_migrate.caba_over_claim_policy", "",
+        )
+
+    def _accept_caba_over_claims(self, conn, report):
+        """dec-24252acf: with the ``official_canonical`` policy parameter
+        set, unresolved legacy CABA rows (the legacy engine's over-claimed
+        VAT) are archived with a cross-reference to the canonical target
+        bill. The books are not touched."""
+        unresolved = report["caba_tax_invoices"]["unresolved"]
+        if not unresolved or self._caba_policy() != "official_canonical":
+            return
+        rows = {
+            row["id"]: row
+            for row in self._fetch_legacy(conn, "tax_invoice_evidence")
+        }
+        accepted = []
+        for legacy_id in unresolved:
+            row = rows.get(legacy_id)
+            if not row:
+                continue
+            bill = self.env["account.move"].search([
+                ("ref", "=", row["bill_reference"]),
+                ("move_type", "in", ("in_invoice", "in_receipt")),
+                ("state", "=", "posted"),
+                ("company_id", "=", self.env.company.id),
+            ], limit=1)
+            archive = self.env["l10n_th.migrate.archive"].search([
+                ("run_id", "=", self.id),
+                ("source_table", "=", "legacy19.account_tax_invoice_evidence"),
+                ("legacy_id", "=", legacy_id),
+            ], limit=1)
+            if not (bill and archive):
+                continue
+            archive.write({
+                "xref_model": "account.move",
+                "xref_res_id": bill.id,
+                "note": (
+                    "Legacy CABA over-claim (VAT %s): the legacy draft-reset "
+                    "engine booked the full remaining VAT on this payment. "
+                    "The official Odoo 20 CABA result is canonical per "
+                    "dec-24252acf — evidence only, not rebooked."
+                    % row["vat_amount"]
+                ),
+            })
+            accepted.append(legacy_id)
+        if accepted:
+            report["caba_tax_invoices"]["policy"] = "official_canonical"
+            report["caba_tax_invoices"]["accepted_over_claim_ids"] = accepted
+
+    def _flag_pnd_form_review(self, conn, report):
+        """dec-a92c38dc: the legacy income_tax_form selection (pnd1/2/3/
+        3a/53) cannot express pnd1a, so no row may be auto-filed as PND1A.
+        Posted PIT withholding moves are queued for manual form
+        classification on the target; the archive keeps them verbatim."""
+        taxes = {
+            row["id"]: row
+            for row in self._fetch_legacy(conn, "withholding_taxes")
+        }
+        pit_move_ids = [
+            row["id"]
+            for row in self._fetch_legacy(conn, "withholding_moves")
+            if row["state"] == "posted"
+            and taxes.get(row["withholding_tax_id"], {}).get("is_pit")
+        ]
+        report["pnd_form_review_queue"] = {
+            "decision": "dec-a92c38dc",
+            "reason": "legacy income_tax_form cannot express pnd1a",
+            "legacy_rows": len(pit_move_ids),
+            "move_ids": pit_move_ids,
+            "auto_filed_pnd1a": 0,
+        }
+
     def _trial_balance(self, conn, report):
         """Matrix 1: posted source and target control totals by document ref.
 
@@ -341,7 +418,8 @@ class L10nThMigrateRun(models.Model):
                 unbalanced.append(move["ref"])
         target_moves = self.env["account.move"].search([
             ("ref", "in", [move["ref"] for move in moves]),
-            ("move_type", "in", ["in_invoice", "in_receipt", "out_invoice", "out_refund"]),
+            ("move_type", "in", ["in_invoice", "in_receipt", "out_invoice",
+                                 "out_refund", "in_refund"]),
             ("state", "=", "posted"),
             ("company_id", "=", self.env.company.id),
         ])
@@ -498,6 +576,10 @@ class L10nThMigrateRun(models.Model):
         """One audit view of the checks and the evidence still needed."""
         balance = report["trial_balance"]
         wht = report["reconciliation"]
+        caba = report["caba_tax_invoices"]
+        accepted_over_claim = set(caba["unresolved"]) <= set(
+            caba.get("accepted_over_claim_ids", []),
+        ) and bool(caba["unresolved"])
         report["reconciliation_summary"] = {
             "source_balanced": balance["debit_credit_equal"] and not balance["unbalanced_moves"],
             "target_balanced": balance["target_debit_credit_equal"],
@@ -510,8 +592,11 @@ class L10nThMigrateRun(models.Model):
             "unresolved_partner_ids": report["pnd_entity_types"]["unresolved"],
             "unresolved_bank_ids": report["banks"]["unresolved"],
             "unresolved_vendor_tax_invoice_ids": report["tax_invoice_evidence"]["unresolved"],
-            "unresolved_caba_tax_invoice_ids": report["caba_tax_invoices"]["unresolved"],
-            "caba_vat_delta": report["caba_tax_invoices"]["vat_delta"],
+            "unresolved_caba_tax_invoice_ids": caba["unresolved"],
+            "caba_vat_delta": caba["vat_delta"],
+            "caba_over_claim_policy": caba.get("policy") or False,
+            "pnd_form_review_queue": report.get(
+                "pnd_form_review_queue", {}).get("legacy_rows", 0),
             "duplicate_tax_names": report["duplicate_taxes"],
             "requires_manual_review": bool(
                 balance["target_missing_refs"]
@@ -521,8 +606,8 @@ class L10nThMigrateRun(models.Model):
                 or report["pnd_entity_types"]["unresolved"]
                 or report["banks"]["unresolved"]
                 or report["tax_invoice_evidence"]["unresolved"]
-                or report["caba_tax_invoices"]["unresolved"]
-                or report["caba_tax_invoices"]["vat_delta"]
+                or (caba["unresolved"] and not accepted_over_claim)
+                or (caba["vat_delta"] and not accepted_over_claim)
                 or report["duplicate_taxes"]
             ),
         }
@@ -542,7 +627,9 @@ class L10nThMigrateRun(models.Model):
                     run._map_tax_invoice_evidence(conn, report)
                     run._reconcile_caba_tax_invoices(conn, report)
                     run._archive_legacy_only(conn, report)
+                    run._accept_caba_over_claims(conn, report)
                     run._archive_certificates(conn, report)
+                    run._flag_pnd_form_review(conn, report)
                     run._trial_balance(conn, report)
                     run._customer_invoice_reconcile(conn, report)
                     run._no_duplicate_check(report, wht_map.values())

@@ -22,3 +22,10 @@ class L10nThMigrateArchive(models.Model):
     source_table = fields.Char(required=True, index=True)
     legacy_id = fields.Integer(required=True)
     payload = fields.Json(string="Legacy Row", required=True)
+    xref_model = fields.Char(
+        string="Target Model",
+        help="Model of the Odoo 20 record this legacy row is cross-referenced "
+             "to (evidence only — the target record is canonical).",
+    )
+    xref_res_id = fields.Integer(string="Target Record ID")
+    note = fields.Char(string="Cross-reference Note")

@@ -402,3 +402,62 @@ class TestMigrateEndToEnd(TransactionCase):
         thaiacc = self.env["ir.module.module"].search([("name", "=", "thaiacc")])
         self.assertEqual(thaiacc.state, "installed")
         self.env["l10n_th.pnd.report"].search_count([])  # registry live
+
+    def test_07_caba_acceptance_and_pnd1a_queue(self):
+        """dec-24252acf + dec-a92c38dc: with the approved policy parameter,
+        an unresolved legacy CABA row (over-claimed VAT) is archived with a
+        cross-reference to the canonical target bill — never synthesized —
+        and PIT withholding rows land in the manual PND1A review queue
+        instead of being auto-filed."""
+        self.test_01_master_data_and_controls()
+        wht_service = self._tax_by_name("WHT 3% ค่าบริการ/จ้างทำของ")
+        self.env["ir.config_parameter"].sudo().set_str(
+            "l10n_th_migrate.caba_over_claim_policy", "official_canonical",
+        )
+        group = self.env["account.tax.group"].search([], limit=1) or \
+            self.env["account.tax.group"].create({"name": "VAT"})
+        vat_on_payment = self.env["account.tax"].create({
+            "name": "Purchase VAT 7% On Payment",
+            "amount_type": "percent",
+            "amount": 7.0,
+            "type_tax_use": "purchase",
+            "tax_exigibility": "on_payment",
+            "tax_group_id": group.id,
+        })
+        bill = self._create_bill(
+            self.vendor, "BILL/2026/10/0003", 100000.0, vat_on_payment,
+            extra_taxes=wht_service,
+        )
+        self._pay(bill, amount=42800.0)  # 40% only → target TI 2,800 only
+
+        run = self._run_migration()
+        caba = run.stats["caba_tax_invoices"]
+        # legacy fixture rows are 2,800 + 4,200; the target produced only
+        # the 2,800 slice, so the second legacy row stays unmatched
+        self.assertEqual(caba["mapped"], 1)
+        self.assertEqual(len(caba["unresolved"]), 1)
+        self.assertEqual(caba["policy"], "official_canonical")
+        self.assertEqual(caba["accepted_over_claim_ids"], caba["unresolved"])
+
+        archive = self.env["l10n_th.migrate.archive"].search([
+            ("run_id", "=", run.id),
+            ("source_table", "=", "legacy19.account_tax_invoice_evidence"),
+            ("legacy_id", "in", caba["accepted_over_claim_ids"]),
+        ])
+        self.assertEqual(len(archive), 1)
+        self.assertEqual(archive.xref_model, "account.move")
+        self.assertEqual(archive.xref_res_id, bill.id)
+        self.assertIn("canonical", archive.note)
+
+        summary = run.stats["reconciliation_summary"]
+        self.assertEqual(
+            summary["caba_over_claim_policy"], "official_canonical",
+        )
+
+        # dec-a92c38dc: PIT rows queued for manual form classification,
+        # nothing auto-filed as PND1A
+        queue = run.stats["pnd_form_review_queue"]
+        self.assertEqual(queue["decision"], "dec-a92c38dc")
+        self.assertGreater(queue["legacy_rows"], 0)
+        self.assertEqual(queue["auto_filed_pnd1a"], 0)
+        self.assertEqual(self.env["l10n_th.pnd.report"].search_count([]), 0)

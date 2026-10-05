@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 ThaiACC
+     License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html) -->
+<!-- dec-5684a37d: historical 50 Tawi certificates and other legacy-only
+     evidence stay accessible read-only after the migration; new
+     transactions use the Odoo 20 canonical engine. -->
+<odoo>
+    <record id="l10n_th_migrate_archive_view_list" model="ir.ui.view">
+        <field name="name">l10n_th.migrate.archive list</field>
+        <field name="model">l10n_th.migrate.archive</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false">
+                <field name="source_table"/>
+                <field name="legacy_id"/>
+                <field name="xref_model"/>
+                <field name="xref_res_id"/>
+                <field name="note"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="l10n_th_migrate_archive_view_form" model="ir.ui.view">
+        <field name="name">l10n_th.migrate.archive form</field>
+        <field name="model">l10n_th.migrate.archive</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <div class="alert alert-info" role="alert"
+                         colspan="2">Read-only legacy evidence archive. The
+                        cross-referenced Odoo 20 record is canonical;
+                        historical rows are never rebooked.
+                    </div>
+                    <group>
+                        <field name="source_table"/>
+                        <field name="legacy_id"/>
+                        <field name="run_id"/>
+                        <field name="xref_model"/>
+                        <field name="xref_res_id"/>
+                    </group>
+                    <notebook>
+                        <page name="payload" string="Legacy Row">
+                            <field name="payload"/>
+                        </page>
+                        <page name="note" string="Cross-reference Note">
+                            <field name="note"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="l10n_th_migrate_archive_action" model="ir.actions.act_window">
+        <field name="name">Legacy Evidence Archive (50 Tawi)</field>
+        <field name="res_model">l10n_th.migrate.archive</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="l10n_th_migrate_archive_menu"
+              name="Legacy Evidence Archive (50 Tawi)"
+              action="l10n_th_migrate_archive_action"
+              parent="account.menu_finance"
+              sequence="99"/>
+</odoo>

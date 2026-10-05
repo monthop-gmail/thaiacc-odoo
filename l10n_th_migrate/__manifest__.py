@@ -18,6 +18,7 @@
     ],
     "data": [
         "security/ir.access.csv",
+        "views/l10n_th_migrate_views.xml",
     ],
     "installable": True,
     "auto_install": False,

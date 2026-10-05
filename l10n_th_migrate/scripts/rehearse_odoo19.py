@@ -36,7 +36,9 @@ lines = fetch("SELECT * FROM legacy19.account_invoice_line ORDER BY move_id, id"
 payments = fetch("SELECT * FROM legacy19.account_payment_evidence ORDER BY date, id")
 withholding_taxes = fetch("SELECT * FROM legacy19.account_withholding_tax ORDER BY id")
 partners = {row["id"]: row for row in fetch("SELECT * FROM legacy19.res_partner ORDER BY id")}
-assert documents and all(row["move_type"] in ("in_invoice", "out_invoice") for row in documents)
+assert documents and all(
+    row["move_type"] in ("in_invoice", "out_invoice", "in_refund")
+    for row in documents)
 assert all(row["state"] in ("posted", "cancel") for row in documents)
 assert len({row["id"] for row in documents}) == len(documents)
 assert len({(row["id"], row["invoice_move_id"]) for row in payments}) == len(payments)
@@ -192,12 +194,20 @@ for row in documents:
             "account_id": get_account(line["account_code"]).id,
             "tax_ids": [Command.set(taxes)],
         }))
-    move = Move.create({
+    create_vals = {
         "company_id": company.id, "partner_id": get_partner(row["partner_id"]).id,
         "move_type": row["move_type"], "ref": row["ref"],
         "date": row["date"], "invoice_date": row["invoice_date"],
         "invoice_line_ids": commands,
-    })
+    }
+    if row["reversed_ref"]:
+        origin = Move.search([
+            ("ref", "=", row["reversed_ref"]), ("company_id", "=", company.id),
+            ("move_type", "in", ("in_invoice", "in_receipt", "out_invoice")),
+        ], limit=1)
+        assert origin, f"Reversal origin {row['reversed_ref']} not imported"
+        create_vals["reversed_entry_id"] = origin.id
+    move = Move.create(create_vals)
     move.action_post()
     if row["state"] == "cancel":
         move.button_cancel()
@@ -273,11 +283,21 @@ gates = {
                       and last_run.stats["customer_tax_invoices"]["with_official_ti"]
                       == last_run.stats["customer_tax_invoices"]["legacy_rows"]
                       else "DELTA",
-    "caba_vat": "DELTA" if summary["caba_vat_delta"] or
-                summary["unresolved_caba_tax_invoice_ids"] else "PASS",
+    "caba_vat": "PASS" if (
+        (not (summary["caba_vat_delta"]
+              or summary["unresolved_caba_tax_invoice_ids"]))
+        or (summary.get("caba_over_claim_policy") == "official_canonical"
+            and summary["unresolved_caba_tax_invoice_ids"] == [])
+    ) else "DELTA",
     "canonical_identity": "PASS" if len(documents) == len(target_moves) else "DELTA",
     "pit_pnd_periods": "BLOCKED",
-    "reversal_pair": "BLOCKED",
+    "reversal_pair": "PASS" if (
+        documents and all(
+            target_moves[row["id"]].reversed_entry_id
+            and target_moves[row["id"]].reversed_entry_id.ref == row["reversed_ref"]
+            for row in documents if row["reversed_ref"]
+        )
+    ) else "DELTA" if any(row["reversed_ref"] for row in documents) else "BLOCKED",
     "bank_qr_render": "BLOCKED",
     "historical_50_tawi_access": "BLOCKED",
     "historical_source_snapshot": "BLOCKED",

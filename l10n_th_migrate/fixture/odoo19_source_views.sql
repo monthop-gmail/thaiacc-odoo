@@ -37,10 +37,13 @@ FROM public.res_company c JOIN legacy19.scope s ON s.company_id = c.id;
 
 CREATE OR REPLACE VIEW legacy19.account_move AS
 SELECT m.id, COALESCE(m.ref, m.name) AS ref, m.move_type, m.state,
-       m.partner_id, m.date, m.amount_total, m.invoice_date
+       m.partner_id, m.date, m.amount_total, m.invoice_date,
+       COALESCE(orig.ref, orig.name) AS reversed_ref
 FROM public.account_move m
 JOIN legacy19.scope s ON s.company_id = m.company_id
-WHERE m.move_type IN ('in_invoice', 'in_receipt', 'out_invoice', 'out_refund');
+LEFT JOIN public.account_move orig ON orig.id = m.reversed_entry_id
+WHERE m.move_type IN ('in_invoice', 'in_receipt', 'out_invoice', 'out_refund',
+                      'in_refund');
 
 CREATE OR REPLACE VIEW legacy19.account_move_line AS
 SELECT l.id, l.move_id,
