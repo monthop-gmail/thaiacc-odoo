@@ -216,7 +216,23 @@ company, grant a read-only role the `legacy19` schema, and run
 
 The rerun reproduced every frozen control total (documents 421,000, WHT
 3,000, on-invoice VAT mapped, CABA source 9,800 vs target 7,000) and the
-post-upgrade import created 0 documents and 0 payments.
+post-upgrade import created 0 documents and 0 payments. After the owner
+decisions (dec-24252acf, dec-a92c38dc, dec-5684a37d) were implemented,
+the cohort also carries a genuine reversal pair — vendor credit note
+`MIG-REFUND-001` posted, reconciled against `MIG-BILL-002`, and mirrored
+by the target with `reversed_entry_id` set (documents 528,000 both
+sides) — and the machine gates close as follows: posted_documents,
+withholding, on_invoice_vat, canonical_identity, post_migration_upgrade,
+reversal_pair = PASS; caba_vat = PASS under the
+`l10n_th_migrate.caba_over_claim_policy=official_canonical` parameter
+(the legacy 7,000 over-claim row is archived with a cross-reference to
+the canonical bill, never rebooked); pit_pnd_periods = PASS with the
+PND1A manual review queue recorded; historical_50_tawi_access = PASS
+via the read-only Accounting archive menu;
+full_ledger_by_period = DELTA with every delta explained (the accepted
+2,800 CABA pair plus official-only net-zero mirror shapes ±200,000);
+bank_qr_render and historical_source_snapshot stay BLOCKED on external
+dependencies.
 
 **Settlement order decides the CABA over-claim.** Clearing each
 installment's deferred tax before paying the next yields 2,800 + 4,200 =

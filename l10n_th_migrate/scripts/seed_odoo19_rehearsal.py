@@ -312,14 +312,20 @@ if not refund:
             "ref": "MIG-REFUND-001", "date": "2026-09-25",
             "invoice_date": "2026-09-25",
         }])
-    except Exception as exc:  # legacy asks for the vendor TI info at post
-        log(f"reverse deferred ({exc}); filling TI MIG-REFUND-TI")
+    except Exception as exc:  # legacy may raise while auto-posting
+        log(f"reverse raised ({type(exc).__name__}: {exc})")
         refund = Move.search([("ref", "=", "MIG-REFUND-001"),
                               ("move_type", "=", "in_refund"),
                               ("company_id", "=", company.id)])
         assert refund, "reverse created no refund move"
-        fill_tax_invoice_numbers(refund, "MIG-REFUND-TI")
-        refund.action_post()
+    refund.ensure_one()
+    if refund.state != "posted":
+        try:
+            refund.action_post()
+        except Exception as exc:  # legacy asks for the vendor TI info
+            log(f"post refund deferred ({exc}); filling TI MIG-REFUND-TI")
+            fill_tax_invoice_numbers(refund, "MIG-REFUND-TI")
+            refund.action_post()
     assert refund.state == "posted", refund.state
     payable = bill_b.line_ids.filtered(
         lambda l: l.account_id.account_type == "liability_payable")

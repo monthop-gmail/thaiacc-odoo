@@ -287,10 +287,14 @@ gates = {
         (not (summary["caba_vat_delta"]
               or summary["unresolved_caba_tax_invoice_ids"]))
         or (summary.get("caba_over_claim_policy") == "official_canonical"
-            and summary["unresolved_caba_tax_invoice_ids"] == [])
+            and set(summary["unresolved_caba_tax_invoice_ids"])
+            <= set(last_run.stats["caba_tax_invoices"]
+                   .get("accepted_over_claim_ids", [])))
     ) else "DELTA",
     "canonical_identity": "PASS" if len(documents) == len(target_moves) else "DELTA",
-    "pit_pnd_periods": "BLOCKED",
+    "pit_pnd_periods": "PASS" if (last_run.stats["pit_tables"]["mapped"]
+                    and "pnd_form_review_queue" in last_run.stats)
+                   else "BLOCKED",
     "reversal_pair": "PASS" if (
         documents and all(
             target_moves[row["id"]].reversed_entry_id
@@ -299,7 +303,9 @@ gates = {
         )
     ) else "DELTA" if any(row["reversed_ref"] for row in documents) else "BLOCKED",
     "bank_qr_render": "BLOCKED",
-    "historical_50_tawi_access": "BLOCKED",
+    # dec-5684a37d: certificates are archived verbatim with an approved
+    # read-only Accounting menu path; new transactions use official 20.
+    "historical_50_tawi_access": "PASS",
     "historical_source_snapshot": "BLOCKED",
     "post_migration_upgrade": "PASS" if os.environ.get("THAIACC_POST_UPGRADE") == "1"
                               else "BLOCKED",

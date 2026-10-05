@@ -1,21 +1,21 @@
 {
   "documents": {
     "created": 0,
-    "linked": 5,
-    "source": 5
+    "linked": 6,
+    "source": 6
   },
   "gates": {
     "bank_qr_render": "BLOCKED",
-    "caba_vat": "DELTA",
+    "caba_vat": "PASS",
     "canonical_identity": "PASS",
     "full_ledger_by_period": "DELTA",
-    "historical_50_tawi_access": "BLOCKED",
+    "historical_50_tawi_access": "PASS",
     "historical_source_snapshot": "BLOCKED",
     "on_invoice_vat": "PASS",
-    "pit_pnd_periods": "BLOCKED",
+    "pit_pnd_periods": "PASS",
     "post_migration_upgrade": "PASS",
     "posted_documents": "PASS",
-    "reversal_pair": "BLOCKED",
+    "reversal_pair": "PASS",
     "withholding": "PASS"
   },
   "ledger_period_deltas": [
@@ -46,7 +46,7 @@
     "linked": 3,
     "source": 3
   },
-  "runner_id": 4,
+  "runner_id": 10,
   "runner_stats": {
     "archived_rows": 4,
     "banks": {
@@ -59,12 +59,16 @@
       "mapped": 0
     },
     "caba_tax_invoices": {
+      "accepted_over_claim_ids": [
+        10
+      ],
       "legacy_rows": 2,
       "mapped": 1,
+      "policy": "official_canonical",
       "source_vat": 9800.0,
       "target_vat": 7000.0,
       "unresolved": [
-        4
+        10
       ],
       "vat_delta": -2800.0
     },
@@ -83,25 +87,34 @@
       "mapped": 2,
       "unresolved": []
     },
+    "pnd_form_review_queue": {
+      "auto_filed_pnd1a": 0,
+      "decision": "dec-a92c38dc",
+      "legacy_rows": 0,
+      "move_ids": [],
+      "reason": "legacy income_tax_form cannot express pnd1a"
+    },
     "reconciliation": {
       "legacy_wht_total": 3000.0,
       "matched": true,
       "official_wht_total": 3000.0
     },
     "reconciliation_summary": {
+      "caba_over_claim_policy": "official_canonical",
       "caba_vat_delta": -2800.0,
       "document_credit_delta": 0.0,
       "document_debit_delta": 0.0,
       "duplicate_tax_names": [],
       "missing_document_refs": [],
-      "requires_manual_review": true,
+      "pnd_form_review_queue": 0,
+      "requires_manual_review": false,
       "source_balanced": true,
-      "source_document_count": 4,
+      "source_document_count": 5,
       "target_balanced": true,
-      "target_document_count": 4,
+      "target_document_count": 5,
       "unresolved_bank_ids": [],
       "unresolved_caba_tax_invoice_ids": [
-        4
+        10
       ],
       "unresolved_partner_ids": [],
       "unresolved_vendor_tax_invoice_ids": [],
@@ -116,14 +129,14 @@
       "credit_delta": 0.0,
       "debit_credit_equal": true,
       "debit_delta": 0.0,
-      "legacy_credit": 421000.0,
-      "legacy_debit": 421000.0,
-      "moves": 4,
-      "target_credit": 421000.0,
-      "target_debit": 421000.0,
+      "legacy_credit": 528000.0,
+      "legacy_debit": 528000.0,
+      "moves": 5,
+      "target_credit": 528000.0,
+      "target_debit": 528000.0,
       "target_debit_credit_equal": true,
       "target_missing_refs": [],
-      "target_moves": 4,
+      "target_moves": 5,
       "unbalanced_moves": []
     },
     "withholding_taxes": {
@@ -132,7 +145,7 @@
     }
   },
   "source_company_id": 2,
-  "source_database_uuid": "20d0a186-c09f-11f1-8b8b-331dd5b784ca",
+  "source_database_uuid": "1e97314b-c0a8-11f1-9443-4331a47ccca2",
   "status": "BLOCKED",
   "target_company_id": 2
 }
