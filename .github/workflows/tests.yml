@@ -29,6 +29,10 @@ jobs:
       DB_ARGS: --db_host=127.0.0.1 --db_user=odoo --db_password=odoo
     steps:
       - uses: actions/checkout@v4
+      # The official odoo:20 image lacks the python packages our modules
+      # declare as external dependencies — bake a thin CI image first.
+      - name: Build CI image
+        run: docker build -t thaiacc-ci:20 -f .github/ci/Dockerfile .
       # Odoo 20 validates -i names against ir_module_module, which on a
       # virgin database only knows "base" — boot in two steps like
       # test/run_install_test.sh. Demo is required: the migration fixture
@@ -36,13 +40,13 @@ jobs:
       - name: Init base
         run: |
           docker run --rm --network host -v "$PWD":/mnt/extra-addons:ro \
-            --entrypoint /usr/bin/odoo odoo:20 \
+            --entrypoint /usr/bin/odoo thaiacc-ci:20 \
             -d "$DB" $DB_ARGS --stop-after-init --max-cron-threads=0 \
             -i base --with-demo
       - name: Install ThaiACC suite and run tests
         run: |
           docker run --rm --network host -v "$PWD":/mnt/extra-addons:ro \
-            --entrypoint /usr/bin/odoo odoo:20 \
+            --entrypoint /usr/bin/odoo thaiacc-ci:20 \
             -d "$DB" $DB_ARGS --max-cron-threads=0 \
             -i l10n_th_base_sequence,l10n_th_promptpay,l10n_th_purchase_tax_invoice,l10n_th_wht_defaults,l10n_th_pit,l10n_th_pnd_report,ocaacc,thaiacc,l10n_th_migrate \
             --with-demo --test-enable \
