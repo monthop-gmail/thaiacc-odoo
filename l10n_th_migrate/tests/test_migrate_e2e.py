@@ -5,6 +5,7 @@ import os
 
 import psycopg2
 from odoo import Command, fields
+from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
 from odoo.tools import config
 
@@ -437,22 +438,28 @@ class TestMigrateEndToEnd(TransactionCase):
         self.assertEqual(caba["mapped"], 1)
         self.assertEqual(len(caba["unresolved"]), 1)
         self.assertEqual(caba["policy"], "official_canonical")
-        self.assertEqual(caba["accepted_over_claim_ids"], caba["unresolved"])
+        self.assertEqual(caba["decision"], "dec-24252acf")
+        # dec-24252acf with per-bill proof: a 40%-settled bill cannot prove
+        # an over-claim — the 4,200 row may simply be a payment that never
+        # migrated, so nothing is accepted and the run keeps manual review
+        self.assertEqual(caba["accepted_over_claim_ids"], [])
+        self.assertEqual(caba["accepted_over_claim_total"], 0.0)
 
         archive = self.env["l10n_th.migrate.archive"].search([
             ("run_id", "=", run.id),
             ("source_table", "=", "legacy19.account_tax_invoice_evidence"),
-            ("legacy_id", "in", caba["accepted_over_claim_ids"]),
+            ("legacy_id", "in", caba["unresolved"]),
         ])
         self.assertEqual(len(archive), 1)
-        self.assertEqual(archive.xref_model, "account.move")
-        self.assertEqual(archive.xref_res_id, bill.id)
-        self.assertIn("canonical", archive.note)
+        self.assertFalse(archive.xref_model)
+        self.assertFalse(archive.over_claim_amount)
 
         summary = run.stats["reconciliation_summary"]
         self.assertEqual(
             summary["caba_over_claim_policy"], "official_canonical",
         )
+        self.assertFalse(summary["caba_over_claim_waived"])
+        self.assertTrue(summary["requires_manual_review"])
 
         # dec-a92c38dc: PIT rows queued for manual form classification,
         # nothing auto-filed as PND1A
@@ -461,3 +468,93 @@ class TestMigrateEndToEnd(TransactionCase):
         self.assertGreater(queue["legacy_rows"], 0)
         self.assertEqual(queue["auto_filed_pnd1a"], 0)
         self.assertEqual(self.env["l10n_th.pnd.report"].search_count([]), 0)
+
+    def _delete_legacy_over_claim_row(self):
+        conn = psycopg2.connect(self.legacy_dsn)
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cr:
+                cr.execute(
+                    "DELETE FROM legacy19.account_tax_invoice_evidence "
+                    "WHERE id = 24",
+                )
+        finally:
+            conn.close()
+
+    def test_08_caba_over_claim_proven_acceptance(self):
+        """dec-24252acf with per-bill proof: when the bill is fully settled,
+        the legacy payments migrated with it, and legacy CABA VAT minus the
+        official target CABA VAT equals the remaining unresolved row, that
+        row is accepted as over-claim evidence with the amount recorded —
+        and the accepted total must exactly explain the VAT delta."""
+        self.test_01_master_data_and_controls()
+        wht_service = self._tax_by_name("WHT 3% ค่าบริการ/จ้างทำของ")
+        self.env["ir.config_parameter"].sudo().set_str(
+            "l10n_th_migrate.caba_over_claim_policy", "official_canonical",
+        )
+        group = self.env["account.tax.group"].search([], limit=1) or \
+            self.env["account.tax.group"].create({"name": "VAT"})
+        vat_on_payment = self.env["account.tax"].create({
+            "name": "Purchase VAT 7% On Payment",
+            "amount_type": "percent",
+            "amount": 7.0,
+            "type_tax_use": "purchase",
+            "tax_exigibility": "on_payment",
+            "tax_group_id": group.id,
+        })
+        bill = self._create_bill(
+            self.vendor, "BILL/2026/10/0003", 100000.0, vat_on_payment,
+            extra_taxes=wht_service,
+        )
+        self._pay(bill, amount=42800.0)
+        self._pay(bill, amount=64200.0)  # fully settled
+
+        # extra legacy evidence row: the draft-reset engine re-claimed the
+        # first payment's VAT (2,800 booked twice for one 40% slice)
+        conn = psycopg2.connect(self.legacy_dsn)
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cr:
+                cr.execute(
+                    "INSERT INTO legacy19.account_tax_invoice_evidence "
+                    "(id, bill_reference, tax_invoice_number, "
+                    "tax_invoice_date, is_cash_basis, vat_amount) VALUES "
+                    "(24, 'BILL/2026/10/0003', 'V-CABA-2569-40-DUP', "
+                    "'2026-10-25', true, 2800.0)",
+                )
+        finally:
+            conn.close()
+        self.addCleanup(self._delete_legacy_over_claim_row)
+
+        run = self._run_migration()
+        caba = run.stats["caba_tax_invoices"]
+        # rows 22 + 23 map onto the two payment TIs; row 24 (the duplicate
+        # 2,800 claim) is the proven over-claim
+        self.assertEqual(caba["mapped"], 2)
+        self.assertEqual(caba["unresolved"], [24])
+        self.assertEqual(caba["accepted_over_claim_ids"], [24])
+        self.assertEqual(caba["accepted_over_claim_total"], 2800.0)
+        self.assertEqual(caba["vat_delta"], -2800.0)
+        self.assertEqual(caba["decision"], "dec-24252acf")
+        self.assertEqual(caba["decided_by"], "owner")
+
+        summary = run.stats["reconciliation_summary"]
+        self.assertTrue(summary["caba_over_claim_waived"])
+        self.assertEqual(summary["caba_over_claim_decision"], "dec-24252acf")
+        self.assertEqual(summary["caba_over_claim_total"], 2800.0)
+
+        archive = self.env["l10n_th.migrate.archive"].search([
+            ("run_id", "=", run.id),
+            ("source_table", "=", "legacy19.account_tax_invoice_evidence"),
+            ("legacy_id", "=", 24),
+        ])
+        self.assertEqual(len(archive), 1)
+        self.assertEqual(archive.xref_model, "account.move")
+        self.assertEqual(archive.xref_res_id, bill.id)
+        self.assertEqual(archive.over_claim_amount, 2800.0)
+        self.assertIn("over-claim 2800.0", archive.note)
+
+        # the archive's source fields mirror the legacy evidence verbatim
+        # and are immutable, even for admins
+        with self.assertRaises(UserError):
+            archive.write({"payload": {"id": 24}})

@@ -23,6 +23,7 @@ LEGACY_QUERIES = {
     "company_novat": "SELECT company_id, novat FROM legacy19.res_company_novat ORDER BY company_id",
     "withholding_moves": "SELECT id, partner_id, date, state, base_amount, wht_amount, withholding_tax_id, bill_reference FROM legacy19.account_withholding_move ORDER BY id",
     "tax_invoice_evidence": "SELECT id, bill_reference, tax_invoice_number, tax_invoice_date, is_cash_basis, vat_amount FROM legacy19.account_tax_invoice_evidence ORDER BY id",
+    "payment_evidence": "SELECT p.id, p.amount, p.state, p.invoice_move_id, m.ref AS bill_reference FROM legacy19.account_payment_evidence p JOIN legacy19.account_move m ON m.id = p.invoice_move_id ORDER BY p.id",
     "pit_tables": "SELECT id, calendar_year FROM legacy19.personal_income_tax ORDER BY id",
     "account_moves": "SELECT id, ref, move_type, state, partner_id, date, amount_total FROM legacy19.account_move ORDER BY id",
     "account_move_lines": "SELECT id, move_id, account_code, debit, credit FROM legacy19.account_move_line ORDER BY id",
@@ -62,6 +63,16 @@ class L10nThMigrateRun(models.Model):
         string="Archived Legacy Rows",
     )
     error_message = fields.Text(readonly=True)
+    caba_policy_decision = fields.Char(
+        string="CABA Policy Decision",
+        default="dec-24252acf",
+        help="ai-collab decision record that authorizes the "
+        "official-canonical CABA over-claim policy for this run.",
+    )
+    caba_policy_decided_by = fields.Char(
+        string="CABA Policy Decided By",
+        default="owner",
+    )
 
     # --- source access -------------------------------------------------
 
@@ -321,51 +332,132 @@ class L10nThMigrateRun(models.Model):
             "l10n_th_migrate.caba_over_claim_policy", "",
         )
 
+    def _legacy_payment_evidence(self, conn):
+        """Posted legacy payments per bill reference when the source exposes
+        payment evidence; ``None`` when it does not, in which case full
+        settlement on the target carries the payment check alone."""
+        try:
+            rows = self._fetch_legacy(conn, "payment_evidence")
+        except Exception:  # noqa: BLE001 — a source without payment views
+            conn.rollback()
+            return None
+        paid = {}
+        for row in rows:
+            if row["state"] == "posted":
+                paid[row["bill_reference"]] = (
+                    paid.get(row["bill_reference"], 0.0)
+                    + abs(float(row["amount"] or 0.0))
+                )
+        return paid
+
     def _accept_caba_over_claims(self, conn, report):
-        """dec-24252acf: with the ``official_canonical`` policy parameter
-        set, unresolved legacy CABA rows (the legacy engine's over-claimed
-        VAT) are archived with a cross-reference to the canonical target
-        bill. The books are not touched."""
-        unresolved = report["caba_tax_invoices"]["unresolved"]
-        if not unresolved or self._caba_policy() != "official_canonical":
+        """dec-24252acf: with the ``official_canonical`` policy parameter set
+        and the run's decision binding present, a legacy CABA row is accepted
+        as over-claim evidence only when the per-bill arithmetic proves the
+        over-claim:
+
+        * the target bill is unique, posted and fully settled;
+        * the legacy payments for the bill migrated with it (when the
+          source exposes payment evidence);
+        * legacy CABA VAT for the bill minus the official target CABA VAT
+          equals the VAT of that bill's remaining unresolved rows — that
+          difference is the recorded over-claim, never a hidden missing
+          payment.
+
+        The accepted over-claim must then exactly explain the run's VAT
+        delta or the run stays in manual review. The books are not touched."""
+        caba = report["caba_tax_invoices"]
+        if not caba["unresolved"] or self._caba_policy() != "official_canonical":
+            return
+        if not self.caba_policy_decision:
             return
         rows = {
             row["id"]: row
             for row in self._fetch_legacy(conn, "tax_invoice_evidence")
         }
-        accepted = []
-        for legacy_id in unresolved:
+        legacy_paid = self._legacy_payment_evidence(conn)
+        per_bill = {}
+        for legacy_id in caba["unresolved"]:
             row = rows.get(legacy_id)
-            if not row:
-                continue
-            bill = self.env["account.move"].search([
-                ("ref", "=", row["bill_reference"]),
+            if row:
+                per_bill.setdefault(row["bill_reference"], []).append(
+                    (legacy_id, row),
+                )
+        accepted = []
+        accepted_over_claim_total = 0.0
+        for bill_ref, items in per_bill.items():
+            bills = self.env["account.move"].search([
+                ("ref", "=", bill_ref),
                 ("move_type", "in", ("in_invoice", "in_receipt")),
                 ("state", "=", "posted"),
                 ("company_id", "=", self.env.company.id),
-            ], limit=1)
-            archive = self.env["l10n_th.migrate.archive"].search([
-                ("run_id", "=", self.id),
-                ("source_table", "=", "legacy19.account_tax_invoice_evidence"),
-                ("legacy_id", "=", legacy_id),
-            ], limit=1)
-            if not (bill and archive):
+            ])
+            if len(bills) != 1:
                 continue
-            archive.write({
-                "xref_model": "account.move",
-                "xref_res_id": bill.id,
-                "note": (
-                    "Legacy CABA over-claim (VAT %s): the legacy draft-reset "
-                    "engine booked the full remaining VAT on this payment. "
-                    "The official Odoo 20 CABA result is canonical per "
-                    "dec-24252acf — evidence only, not rebooked."
-                    % row["vat_amount"]
-                ),
-            })
-            accepted.append(legacy_id)
-        if accepted:
-            report["caba_tax_invoices"]["policy"] = "official_canonical"
-            report["caba_tax_invoices"]["accepted_over_claim_ids"] = accepted
+            bill = bills
+            if abs(bill.amount_residual) > 0.01:
+                # A partially settled bill cannot prove an over-claim: an
+                # unresolved row may simply be a payment that never
+                # migrated, and accepting it would hide the gap.
+                continue
+            if legacy_paid is not None:
+                target_paid = bill.amount_total - bill.amount_residual
+                if abs(target_paid - legacy_paid.get(bill_ref, 0.0)) > 0.01:
+                    continue
+            bill_rows = [
+                row for row in rows.values()
+                if row["bill_reference"] == bill_ref and row["is_cash_basis"]
+            ]
+            legacy_vat = sum(
+                abs(float(row["vat_amount"] or 0.0)) for row in bill_rows
+            )
+            target_invoices = bill.l10n_th_tax_invoice_ids.filtered(
+                lambda ti: ti.payment_move_id and ti.state == "posted",
+            )
+            target_vat = sum(abs(ti.vat_amount) for ti in target_invoices)
+            over_claim = round(legacy_vat - target_vat, 2)
+            unresolved_vat = round(sum(
+                abs(float(row["vat_amount"] or 0.0)) for _, row in items
+            ), 2)
+            if over_claim <= 0 or abs(over_claim - unresolved_vat) > 0.01:
+                continue
+            archives = [
+                self.env["l10n_th.migrate.archive"].search([
+                    ("run_id", "=", self.id),
+                    ("source_table", "=",
+                     "legacy19.account_tax_invoice_evidence"),
+                    ("legacy_id", "=", legacy_id),
+                ], limit=1)
+                for legacy_id, _row in items
+            ]
+            if not all(archives):
+                continue
+            for (legacy_id, row), archive in zip(items, archives):
+                archive.write({
+                    "xref_model": "account.move",
+                    "xref_res_id": bill.id,
+                    "over_claim_amount": over_claim,
+                    "note": (
+                        "Legacy CABA over-claim: legacy evidence VAT %s "
+                        "against official CABA VAT %s on this bill — "
+                        "over-claim %s (the legacy engine re-claimed VAT "
+                        "on a payment). The official Odoo 20 CABA result "
+                        "is canonical per %s — evidence only, not "
+                        "rebooked." % (
+                            row["vat_amount"], target_vat, over_claim,
+                            self.caba_policy_decision,
+                        )
+                    ),
+                })
+                accepted.append(legacy_id)
+            accepted_over_claim_total += over_claim
+        report["caba_tax_invoices"].update({
+            "policy": "official_canonical",
+            "decision": self.caba_policy_decision,
+            "decided_by": self.caba_policy_decided_by,
+            "accepted_over_claim_ids": accepted,
+            "accepted_over_claim_total": round(accepted_over_claim_total, 2),
+        })
 
     def _flag_pnd_form_review(self, conn, report):
         """dec-a92c38dc: the legacy income_tax_form selection (pnd1/2/3/
@@ -577,9 +669,16 @@ class L10nThMigrateRun(models.Model):
         balance = report["trial_balance"]
         wht = report["reconciliation"]
         caba = report["caba_tax_invoices"]
-        accepted_over_claim = set(caba["unresolved"]) <= set(
-            caba.get("accepted_over_claim_ids", []),
-        ) and bool(caba["unresolved"])
+        accepted_ids = set(caba.get("accepted_over_claim_ids", []))
+        accepted_total = caba.get("accepted_over_claim_total", 0.0)
+        # dec-24252acf waiver: the accepted over-claims must cover every
+        # unresolved row AND exactly explain the VAT delta, otherwise the
+        # run keeps its manual-review flag.
+        caba_waived = (
+            bool(accepted_ids)
+            and set(caba["unresolved"]) <= accepted_ids
+            and abs(caba["vat_delta"] + accepted_total) < 0.01
+        )
         report["reconciliation_summary"] = {
             "source_balanced": balance["debit_credit_equal"] and not balance["unbalanced_moves"],
             "target_balanced": balance["target_debit_credit_equal"],
@@ -595,6 +694,9 @@ class L10nThMigrateRun(models.Model):
             "unresolved_caba_tax_invoice_ids": caba["unresolved"],
             "caba_vat_delta": caba["vat_delta"],
             "caba_over_claim_policy": caba.get("policy") or False,
+            "caba_over_claim_decision": caba.get("decision") or False,
+            "caba_over_claim_total": accepted_total,
+            "caba_over_claim_waived": caba_waived,
             "pnd_form_review_queue": report.get(
                 "pnd_form_review_queue", {}).get("legacy_rows", 0),
             "duplicate_tax_names": report["duplicate_taxes"],
@@ -606,8 +708,8 @@ class L10nThMigrateRun(models.Model):
                 or report["pnd_entity_types"]["unresolved"]
                 or report["banks"]["unresolved"]
                 or report["tax_invoice_evidence"]["unresolved"]
-                or (caba["unresolved"] and not accepted_over_claim)
-                or (caba["vat_delta"] and not accepted_over_claim)
+                or (caba["unresolved"] and not caba_waived)
+                or (caba["vat_delta"] and not caba_waived)
                 or report["duplicate_taxes"]
             ),
         }

@@ -159,6 +159,21 @@ INSERT INTO legacy19.account_tax_invoice_evidence
     (22, 'BILL/2026/10/0003', 'V-CABA-2569-40', '2026-10-25', true, 2800.0),
     (23, 'BILL/2026/10/0003', 'V-CABA-2569-60', '2026-10-26', true, 4200.0);
 
+-- legacy payment evidence: what legacy actually paid per bill (same column
+-- shape as the native legacy19.account_payment_evidence view, so one query
+-- reads both). The over-claim acceptance requires these payments to have
+-- migrated with the bill before any row is accepted as over-claimed VAT.
+CREATE TABLE legacy19.account_payment_evidence (
+    id integer PRIMARY KEY,
+    amount numeric NOT NULL,
+    date date NOT NULL,
+    state varchar NOT NULL,
+    invoice_move_id integer NOT NULL
+);
+INSERT INTO legacy19.account_payment_evidence (id, amount, date, state, invoice_move_id) VALUES
+    (1, 42800.0, '2026-10-25', 'posted', 3),
+    (2, 64200.0, '2026-10-26', 'posted', 3);
+
 -- ------------------------------------------------- legacy PIT (matrix 3)
 CREATE TABLE legacy19.personal_income_tax (
     id integer PRIMARY KEY,

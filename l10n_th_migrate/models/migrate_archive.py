@@ -2,6 +2,7 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html)
 
 from odoo import fields, models
+from odoo.exceptions import UserError
 
 
 class L10nThMigrateArchive(models.Model):
@@ -12,6 +13,8 @@ class L10nThMigrateArchive(models.Model):
     _name = "l10n_th.migrate.archive"
     _description = "Legacy Evidence Archive"
     _order = "source_table, legacy_id"
+
+    _SOURCE_FIELDS = ("run_id", "source_table", "legacy_id", "payload")
 
     run_id = fields.Many2one(
         comodel_name="l10n_th.migrate.run",
@@ -28,4 +31,21 @@ class L10nThMigrateArchive(models.Model):
              "to (evidence only — the target record is canonical).",
     )
     xref_res_id = fields.Integer(string="Target Record ID")
+    over_claim_amount = fields.Float(
+        string="Over-claim Amount",
+        digits="Account",
+        help="For accepted CABA over-claims: legacy CABA VAT minus the "
+             "official target CABA VAT for the bill — recorded separately "
+             "from the row's own VAT.",
+    )
     note = fields.Char(string="Cross-reference Note")
+
+    def write(self, vals):
+        if self and any(field in vals for field in self._SOURCE_FIELDS):
+            raise UserError(self.env._(
+                "Archive source fields (run, source table, legacy id, "
+                "payload) mirror the legacy evidence verbatim and are "
+                "immutable. Only the cross-reference, over-claim amount "
+                "and note may be updated.",
+            ))
+        return super().write(vals)

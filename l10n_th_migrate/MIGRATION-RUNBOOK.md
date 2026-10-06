@@ -206,7 +206,14 @@ task #13 on this evidence.
 fresh clone deterministically (payments pinned to 2026-09-10/15/20): the
 WHT bill with 50 Tawi certificate, the on-invoice VAT bill with tax
 invoice `VAT-MIG-19-001`, a posted and a cancelled customer invoice, and
-the on-payment (CABA) bill paid 42,800 then 64,200. Apply
+the on-payment (CABA) bill paid 42,800 then 64,200. The seed script is
+**not idempotent**: it guards its own document counts, so a rerun on an
+already-seeded database aborts on its assertions instead of duplicating
+documents — reseed only on a fresh clone. Note also that the rehearsal
+cohort carries no posted PIT withholding move, so the report's
+`pit_pnd_periods` gate is labelled `PASS (unit fixture only)`; the
+PND-form-review queue itself is exercised with real PIT rows by the
+module e2e tests. Apply
 `fixture/odoo19_source_views.sql`, set `legacy19.scope` to the seeded
 company, grant a read-only role the `legacy19` schema, and run
 `scripts/rehearse_odoo19.py` on a fresh Odoo 20 target followed by

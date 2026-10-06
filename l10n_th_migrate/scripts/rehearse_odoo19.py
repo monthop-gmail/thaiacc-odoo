@@ -292,9 +292,13 @@ gates = {
                    .get("accepted_over_claim_ids", [])))
     ) else "DELTA",
     "canonical_identity": "PASS" if len(documents) == len(target_moves) else "DELTA",
-    "pit_pnd_periods": "PASS" if (last_run.stats["pit_tables"]["mapped"]
-                    and "pnd_form_review_queue" in last_run.stats)
-                   else "BLOCKED",
+    # The rehearsal cohort carries no posted PIT withholding move, so the
+    # PND-queue side of this gate is exercised by the unit fixture only
+    # (the e2e test covers the queue with real PIT rows).
+    "pit_pnd_periods": ("PASS (unit fixture only)" if (
+        last_run.stats["pit_tables"]["mapped"]
+        and "pnd_form_review_queue" in last_run.stats)
+        else "BLOCKED"),
     "reversal_pair": "PASS" if (
         documents and all(
             target_moves[row["id"]].reversed_entry_id
