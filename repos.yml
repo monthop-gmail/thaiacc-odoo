@@ -1,14 +1,16 @@
 # gitaggregate configuration
 # Usage: pip install git-aggregator && gitaggregate -c repos.yml
 #
-# 20.0 STATUS (as of 2026-09-26, Odoo 20 release week): only OCA/partner-contact
-# has a 20.0 branch yet. Entries below target 20.0 and will fail loudly (branch
-# not found) until the OCA 20.0 branches exist — the devcontainer entrypoint
-# turns that into a clear error instead of starting Odoo on a broken tree.
-# Uncomment entries per repo as their 20.0 branches land, or re-pin to 19.0
-# if you need the 19.0 stack (use the 19.0 branch of this repo for that).
-# This pulls OCA modules from our forks (with pending migration PRs)
-# Once PRs are merged upstream, switch remotes from monthop → oca
+# Only the THAIACC_PROFILE=aggregate flow uses this file. The default 20.0
+# profile is official-only and does not read it.
+#
+# 20.0 STATUS (checked 2026-11-06): every OCA repo below now has a 20.0 branch,
+# but most modules are not migrated into it yet. Upstream 20.0 currently ships
+# date_range (server-ux), partner_title (partner-contact), mis_builder
+# (mis-builder), and l10n_th_base_utils + l10n_th_amount_to_text
+# (l10n-thailand). It does NOT yet ship base_tier_validation, report_xlsx*,
+# partner_firstname or partner_company_type. See MIGRATION-20.0.md §4.
+# For the 19.0 feature set, use the 19.0 branch of this repo.
 
 # Needed for date_range (l10n_th_account_tax_report depends on it).
 # The tier_validation family moved out of this repo for 19.0 — see ./tier-validation.
@@ -29,30 +31,21 @@
     - oca 20.0
   target: oca 20.0
 
+# No 20.0-mig-* branches exist on the monthop-gmail fork. The six this list
+# used to name (account_tax_report, account_wht_cert_form, mis_report, partner,
+# tier_department, tier_department_demo) were never created, so the aggregate
+# failed on them. Those modules are in the Later bucket (MIGRATION-20.0.md §6).
+# Add a `monthop` remote and a `monthop 20.0-mig-<module>` merge line here once
+# such a branch actually exists.
 ./l10n-thailand:
   remotes:
     oca: https://github.com/OCA/l10n-thailand.git
-    monthop: https://github.com/monthop-gmail/l10n-thailand.git
-  # Drop a branch once its PR is merged upstream: it becomes an ancestor of
-  # oca 19.0, so merging it is a no-op that only slows the aggregate down and
-  # makes this list look like more is pending than really is.
-  # Merged so far: l10n_th_base_utils (#577), l10n_th_account_tax (#578).
   merges:
     - oca 20.0
-    - monthop 20.0-mig-l10n_th_account_tax_report
-    - monthop 20.0-mig-l10n_th_account_wht_cert_form
-    - monthop 20.0-mig-l10n_th_mis_report
-    - monthop 20.0-mig-l10n_th_partner
-    - monthop 20.0-mig-l10n_th_tier_department
-    - monthop 20.0-mig-l10n_th_tier_department_demo
-  target: monthop merge-20.0
-  fetch_all: true
-  shell_command_after:
-    # resolve .codecov.yml conflicts from multiple branches
-    - rm -f .codecov.yml && git add -A && git diff --cached --quiet || git commit --no-verify -m "[AGG] remove .codecov.yml (not needed in aggregate)"
+  target: oca 20.0
 
-# partner_company_type was merged upstream via OCA/partner-contact#2161,
-# so the fork branch is no longer needed.
+# OCA/partner-contact#2161 merged partner_company_type into 19.0, not 20.0.
+# The 20.0 branch does not have it yet (only partner_title, of the trio).
 ./partner-contact:
   remotes:
     oca: https://github.com/OCA/partner-contact.git
@@ -60,8 +53,7 @@
     - oca 20.0
   target: oca 20.0
 
-# mis_builder was released on OCA/mis-builder 19.0 (19.0.1.2.0), so the
-# versada migration branch is no longer needed.
+# mis_builder is on OCA/mis-builder 20.0, so no migration branch is needed.
 ./mis-builder:
   remotes:
     oca: https://github.com/OCA/mis-builder.git

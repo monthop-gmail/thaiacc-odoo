@@ -59,12 +59,12 @@ Self-migration spike branches exist on the working clones (and can be pushed
 to the `monthop-gmail` forks when needed). They are **optional bridges, not
 the plan**: retire each one as soon as its exit condition is met.
 
-| Bridge | Where | Needed by | Exit condition | Exit action |
-|---|---|---|---|---|
-| `date_range` | `OCA/server-ux` fork branch `20.0-mig-date_range` | `l10n_th_account_tax_report` (Later bucket) | `OCA/server-ux` 20.0 ships `date_range` | drop the `monthop 20.0-mig-*` line from `repos.yml`, aggregate upstream |
-| `report_xlsx` + `report_xlsx_helper` | `OCA/reporting-engine` fork branches | PND/xlsx reporting (Later bucket) | `OCA/reporting-engine` 20.0 ships both | same |
-| `partner_company_type`, `partner_firstname`, `partner_title` | `OCA/partner-contact` fork branches | `l10n_th_partner` chain (Later bucket) | `OCA/partner-contact` 20.0 ships them (mind the 20.0 `is_company` semantic, see §5) | same |
-| `base_tier_validation` family, `mis_builder` | not started | `l10n_th_tier_department`, `l10n_th_mis_report` (Later bucket) | upstream 20.0 branches exist | migrate only if still needed by the Later-bucket work |
+| Bridge | Where | Needed by | Exit condition | Exit action | Status (checked 2026-11-06) |
+|---|---|---|---|---|---|
+| `date_range` | `OCA/server-ux` fork branch `20.0-mig-date_range` | `l10n_th_account_tax_report` (Later bucket) | `OCA/server-ux` 20.0 ships `date_range` | drop the `monthop 20.0-mig-*` line from `repos.yml`, aggregate upstream | **exit met**: upstream 20.0 has `date_range` and `repos.yml` already aggregates upstream only. No bridge needed. |
+| `report_xlsx` + `report_xlsx_helper` | `OCA/reporting-engine` fork branches | PND/xlsx reporting (Later bucket) | `OCA/reporting-engine` 20.0 ships both | same | still needed: neither module is on upstream 20.0 yet |
+| `partner_company_type`, `partner_firstname`, `partner_title` | `OCA/partner-contact` fork branches | `l10n_th_partner` chain (Later bucket) | `OCA/partner-contact` 20.0 ships them (mind the 20.0 `is_company` semantic, see §5) | same | partial: only `partner_title` is upstream. `partner_company_type` reached 19.0 (#2161), not 20.0 |
+| `base_tier_validation` family, `mis_builder` | not started | `l10n_th_tier_department`, `l10n_th_mis_report` (Later bucket) | upstream 20.0 branches exist | migrate only if still needed by the Later-bucket work | `mis_builder`: **exit met** (on `OCA/mis-builder` 20.0). `base_tier_validation`: `OCA/tier-validation` 20.0 exists but has no modules yet |
 
 General exit rule (team fork policy): a fork is a temporary compatibility
 bridge, retired once suitable OCA upstream exists **and** ThaiACC
@@ -91,9 +91,11 @@ Thai accounting–specific notes (kept here, linked from the guide):
 - Official withholding line amounts are positive; signs are applied when
   AMLs are created.
 - `l10n_th_base_sequence` on this branch carries the core-20.0 alignment
-  fixes (ISO week legends, `env.transaction.clear()`); when
-  `OCA/l10n-thailand` opens its 20.0 branch, these fixes go upstream via
-  `20.0-mig-l10n_th_base_sequence` and the local copy is shadowed again.
+  fixes (ISO week legends, `env.transaction.clear()`). These fixes are due to
+  go upstream via `20.0-mig-l10n_th_base_sequence`, after which the local copy
+  is shadowed again. `OCA/l10n-thailand` opened its 20.0 branch before
+  2026-11-06, but that `20.0-mig-l10n_th_base_sequence` PR has not been opened
+  yet.
 
 ## 6. Remaining (Later bucket — needs team/owner direction)
 
